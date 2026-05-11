@@ -1,0 +1,142 @@
+#!/usr/bin/env bash
+# Set up the private Obsidian vault: deploy key, clone, autosync daemon.
+# Idempotent. Run once per machine.
+#
+# Manage the autosync daemon after setup:
+#   macOS:
+#     log     : tail -f ~/Library/Logs/vault-sync.log
+#     force   : launchctl kickstart -k gui/$(id -u)/com.silvrduck.vault-sync
+#     disable : launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.silvrduck.vault-sync.plist
+#   Linux:
+#     log     : journalctl --user -u vault-sync.service -f
+#     force   : systemctl --user start vault-sync.service
+#     disable : systemctl --user disable --now vault-sync.timer
+
+set -euo pipefail
+
+VAULT_REPO="${OBSIDIAN_VAULT_REPO:-git@github.com:SilvrDuck/obsidian-vault.git}"
+VAULT_DIR="${OBSIDIAN_VAULT_DIR:-$HOME/vaults/main}"
+DEPLOY_KEY="${OBSIDIAN_VAULT_DEPLOY_KEY:-$HOME/.ssh/vault_deploy}"
+LABEL="com.silvrduck.vault-sync"
+PLIST="$HOME/Library/LaunchAgents/${LABEL}.plist"
+SYSTEMD_DIR="$HOME/.config/systemd/user"
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<HELP
+setup-obsidian-vault
+
+Provision the private Obsidian vault end-to-end:
+  1. Generate a per-machine deploy key (~/.ssh/vault_deploy).
+  2. Clone the vault to ~/vaults/main using that key.
+  3. Validate end-to-end (fetch + a real vault-sync run).
+  4. Load the launchd / systemd-user job for 10-min background sync.
+
+Fails loudly if any step is incomplete. Idempotent — safe to re-run.
+
+Env overrides:
+  OBSIDIAN_VAULT_REPO        (default: $VAULT_REPO)
+  OBSIDIAN_VAULT_DIR         (default: \$HOME/vaults/main)
+  OBSIDIAN_VAULT_DEPLOY_KEY  (default: \$HOME/.ssh/vault_deploy)
+HELP
+  exit 0
+fi
+
+step() { printf '\n==> %s\n' "$*"; }
+ok()   { printf '    ok: %s\n' "$*"; }
+die()  { printf '\nfailed: %s\n' "$*" >&2; exit 1; }
+
+open_url() {
+  if command -v open >/dev/null 2>&1; then open "$1"
+  elif command -v xdg-open >/dev/null 2>&1; then xdg-open "$1" >/dev/null 2>&1 &
+  else echo "    (open manually: $1)"
+  fi
+}
+
+# ----------------------------------------------------------------------------
+step "Deploy key"
+# ----------------------------------------------------------------------------
+mkdir -p "$(dirname "$DEPLOY_KEY")"
+chmod 700 "$(dirname "$DEPLOY_KEY")"
+
+if [[ -f "$DEPLOY_KEY" && -f "${DEPLOY_KEY}.pub" ]]; then
+  ok "reusing $DEPLOY_KEY"
+else
+  ssh-keygen -t ed25519 -N "" -f "$DEPLOY_KEY" -C "vault-sync@$(hostname -s)" >/dev/null
+  ok "generated $DEPLOY_KEY"
+fi
+
+repo_path=$(printf '%s' "$VAULT_REPO" | sed -E 's#.*[:/]([^/]+/[^/]+)\.git$#\1#')
+deploy_url="https://github.com/${repo_path}/settings/keys/new"
+
+echo
+echo "    Add this public key as a deploy key with WRITE access:"
+echo
+sed 's/^/      /' "${DEPLOY_KEY}.pub"
+echo
+echo "    GitHub deploy keys page: $deploy_url"
+open_url "$deploy_url"
+echo
+read -r -p "    Press enter once added with WRITE access (Ctrl-C to abort): "
+
+GIT_SSH="ssh -i $DEPLOY_KEY -F /dev/null -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+
+# ----------------------------------------------------------------------------
+step "Vault clone"
+# ----------------------------------------------------------------------------
+if [[ -d "$VAULT_DIR/.git" ]]; then
+  ok "already cloned at $VAULT_DIR"
+elif [[ -d "$VAULT_DIR" && -n "$(ls -A "$VAULT_DIR" 2>/dev/null)" ]]; then
+  die "$VAULT_DIR exists and is not empty; refusing to clone over it"
+else
+  mkdir -p "$(dirname "$VAULT_DIR")"
+  GIT_SSH_COMMAND="$GIT_SSH" git clone "$VAULT_REPO" "$VAULT_DIR" \
+    || die "clone failed — is the deploy key added with WRITE access?"
+  ok "cloned to $VAULT_DIR"
+fi
+
+git -C "$VAULT_DIR" config core.sshCommand "$GIT_SSH"
+ok "pinned deploy key via core.sshCommand"
+
+git -C "$VAULT_DIR" fetch --quiet \
+  || die "fetch failed even with deploy key — verify it's added with WRITE access"
+ok "remote reachable via deploy key"
+
+# ----------------------------------------------------------------------------
+step "End-to-end validation"
+# ----------------------------------------------------------------------------
+# Runs the same script the daemon will run. Validates push permissions
+# (the daemon would otherwise fail-silent into the log).
+[[ -x "$HOME/.local/bin/vault-sync" ]] \
+  || die "$HOME/.local/bin/vault-sync missing — run 'chezmoi apply' first"
+"$HOME/.local/bin/vault-sync" \
+  || die "vault-sync exited non-zero — deploy key likely lacks WRITE access"
+ok "vault-sync round-tripped (pull + push) successfully"
+
+# ----------------------------------------------------------------------------
+step "Background autosync"
+# ----------------------------------------------------------------------------
+case "$(uname -s)" in
+  Darwin)
+    [[ -f "$PLIST" ]] || die "missing $PLIST — run 'chezmoi apply' first"
+    launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+    launchctl bootstrap "gui/$(id -u)" "$PLIST" \
+      || die "launchctl bootstrap failed"
+    ok "LaunchAgent loaded ($LABEL)"
+    ok "log: ~/Library/Logs/vault-sync.log"
+    ;;
+  Linux)
+    [[ -f "$SYSTEMD_DIR/vault-sync.timer" ]] \
+      || die "missing $SYSTEMD_DIR/vault-sync.timer — run 'chezmoi apply' first"
+    systemctl --user daemon-reload
+    systemctl --user enable --now vault-sync.timer \
+      || die "systemctl --user enable failed"
+    ok "timer enabled (vault-sync.timer)"
+    ok "log: journalctl --user -u vault-sync.service"
+    ;;
+  *)
+    die "unsupported OS: $(uname -s)"
+    ;;
+esac
+
+echo
+echo "==> Done. Vault at $VAULT_DIR — background sync every 10 minutes."

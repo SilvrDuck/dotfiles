@@ -1,0 +1,6 @@
+[Unit]
+Description=Sync Obsidian vault to git remote
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/vault-sync

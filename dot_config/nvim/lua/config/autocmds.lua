@@ -85,3 +85,39 @@ vim.api.nvim_create_autocmd("BufWinEnter", {
     end
   end,
 })
+
+-- Vault auto-sync: fire ~/.local/bin/vault-sync (detached) when a file under
+-- ~/vaults/main is saved, debounced 2s. Flush any pending fire on nvim exit so
+-- :q after a save doesn't strand the last edits until the next cron tick.
+-- Silently inert on machines without the daemon installed.
+local vault_script = vim.fn.expand("~/.local/bin/vault-sync")
+local vault_root = vim.fn.expand("~/vaults/main")
+local vault_timer
+
+local function vault_fire()
+  if vim.fn.executable(vault_script) == 1 then
+    vim.system({ vault_script }, { detach = true })
+  end
+end
+
+local vault_group = vim.api.nvim_create_augroup("vault-sync", { clear = true })
+
+vim.api.nvim_create_autocmd("BufWritePost", {
+  group = vault_group,
+  callback = function(args)
+    if vim.startswith(vim.fn.fnamemodify(args.file, ":p"), vault_root) then
+      if vault_timer then vault_timer:stop() end
+      vault_timer = vim.defer_fn(vault_fire, 2000)
+    end
+  end,
+})
+
+vim.api.nvim_create_autocmd("VimLeavePre", {
+  group = vault_group,
+  callback = function()
+    if vault_timer then
+      vault_timer:stop()
+      vault_fire()
+    end
+  end,
+})
