@@ -1,0 +1,12 @@
+{{- $defaultKind := "desktop" -}}
+{{- if and (eq .chezmoi.os "linux") (stat (joinPath .chezmoi.homeDir ".local/share/omarchy")) -}}
+{{- $defaultKind = "omarchy" -}}
+{{- end -}}
+
+{{- $machineKind := promptChoiceOnce . "machine_kind" "Machine kind" (list "desktop" "omarchy" "devcontainer") $defaultKind -}}
+
+[data]
+machine_kind = {{ $machineKind | quote }}
+is_mac = {{ eq .chezmoi.os "darwin" }}
+is_linux = {{ eq .chezmoi.os "linux" }}
+is_omarchy_detected = {{ and (eq .chezmoi.os "linux") (stat (joinPath .chezmoi.homeDir ".local/share/omarchy") | not | not) }}
