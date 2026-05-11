@@ -1,5 +1,9 @@
 # Quickstart
 
+Personal chezmoi dotfiles for macOS, Linux, Omarchy, and devcontainers.
+
+Tries to not override Omarchy stuff.
+
 ## Desktop
 
 ```sh
