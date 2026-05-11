@@ -57,3 +57,17 @@ RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- in
   "postCreateCommand": "chezmoi update --apply || true"
 ```
 
+## Obsidian
+
+```sh
+# macOS
+tail -f ~/Library/Logs/vault-sync.log
+launchctl kickstart -k gui/$(id -u)/com.silvrduck.vault-sync
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.silvrduck.vault-sync.plist
+
+# Linux
+journalctl --user -u vault-sync.service -f
+systemctl --user start vault-sync.service
+systemctl --user disable --now vault-sync.timer
+```
+
