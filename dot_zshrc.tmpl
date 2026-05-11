@@ -118,6 +118,15 @@ function zle-line-finish {
 
 zle -N zle-line-finish  # cursor on prompt end
 
+function vi-dd-clear-line-insert {
+  BUFFER=""  # clear line
+  CURSOR=0  # start of line
+  zle vi-insert  # back to insert
+}
+
+zle -N vi-dd-clear-line-insert  # register widget
+bindkey -M vicmd 'dd' vi-dd-clear-line-insert  # dd clears and inserts
+
 # -----------------------------------------------------------------------------
 # History search
 # -----------------------------------------------------------------------------
