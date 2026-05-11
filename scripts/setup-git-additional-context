@@ -1,0 +1,226 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-git-additional-context
+
+One-time setup for a work/client/alternate Git identity.
+
+Performs:
+  1. Asks for context name, folder, Git display name, email, and optional clone rewrite prefixes.
+  2. Creates ~/.ssh/id_ed25519_<context> if missing.
+  3. Writes ~/.config/git/contexts/<context>.gitconfig.
+  4. Ensures ~/.config/git/config includes shared dotfiles Git defaults.
+  5. Adds includeIf so repos under the context folder use this identity.
+  6. Adds SSH aliases for GitHub and a configurable GitLab host with the context key.
+  7. Optionally adds URL rewrites for configured GitHub/GitLab org/group prefixes.
+  8. Prints the public key for manual provider registration.
+
+Provider prefixes are optional.
+Leave them empty if you mostly use gh/glab clone or prefer adding rewrites later.
+HELP
+  exit 0
+fi
+
+ask() {
+  local prompt="$1" default="${2:-}" ans
+
+  if [[ -n "$default" ]]; then
+    read -r -p "$prompt [$default]: " ans
+    echo "${ans:-$default}"
+  else
+    read -r -p "$prompt: " ans
+    echo "$ans"
+  fi
+}
+
+trim() {
+  local value="$1"
+  echo "$value" | xargs
+}
+
+normalize_home_path() {
+  local path="$1"
+  path="${path/#\~/$HOME}"
+  printf '%s\n' "$path"
+}
+
+normalize_host() {
+  local value="$1"
+
+  value="$(trim "$value")"
+  value="${value#http://}"
+  value="${value#https://}"
+  value="${value%%/*}"
+  value="${value%%\?*}"
+
+  printf '%s\n' "$value"
+}
+
+append_rewrite() {
+  local main="$1" alias="$2" host="$3" prefix="$4"
+
+  prefix="$(trim "$prefix")"
+  prefix="${prefix#/}"
+  prefix="${prefix%/}"
+
+  [[ -z "$prefix" ]] && return 0
+
+  if ! grep -qF "git@$alias:$prefix/" "$main"; then
+    cat >> "$main" <<EOF2
+
+[url "git@$alias:$prefix/"]
+    insteadOf = https://$host/$prefix/
+    insteadOf = git@$host:$prefix/
+EOF2
+  fi
+}
+
+append_ssh_host() {
+  local ssh_config="$1" alias="$2" host="$3" key="$4"
+
+  if ! grep -qF "Host $alias" "$ssh_config"; then
+    cat >> "$ssh_config" <<EOF2
+
+Host $alias
+    HostName $host
+    User git
+    IdentityFile $key
+    IdentitiesOnly yes
+EOF2
+  fi
+}
+
+mkdir -p "$HOME/.ssh" "$HOME/.config/git/contexts"
+chmod 700 "$HOME/.ssh"
+
+ctx="$(ask 'Context name, e.g. work')"
+folder_input="$(ask 'Folder for this identity' "~/$ctx")"
+folder="$(normalize_home_path "$folder_input")"
+
+default_name="$(
+  git config --file "$HOME/.config/git/config" user.name 2>/dev/null \
+    || git config --global user.name 2>/dev/null \
+    || true
+)"
+
+name="$(ask 'Git display name' "$default_name")"
+email="$(ask 'Git email for this context')"
+
+github_prefixes="$(ask 'GitHub org/user prefixes for clone rewrites, optional' '')"
+
+gitlab_host_input="$(ask 'GitLab host' 'gitlab.com')"
+gitlab_host="$(normalize_host "$gitlab_host_input")"
+gitlab_prefixes="$(ask 'GitLab group/user prefixes for clone rewrites, optional' '')"
+
+key="$HOME/.ssh/id_ed25519_$ctx"
+config_file="$HOME/.config/git/contexts/$ctx.gitconfig"
+main="$HOME/.config/git/config"
+
+github_alias="github-$ctx"
+gitlab_alias="gitlab-$ctx"
+
+if [[ ! -f "$key" ]]; then
+  ssh-keygen -t ed25519 -f "$key" -C "$(whoami)@$(hostname -s)-$ctx"
+fi
+
+cat > "$config_file" <<EOF2
+[user]
+    name = $name
+    email = $email
+
+[core]
+    sshCommand = ssh -i $key -o IdentitiesOnly=yes
+EOF2
+
+chmod 600 "$config_file"
+
+touch "$main"
+chmod 600 "$main"
+
+if ! grep -qF 'path = ~/.config/git/git-defaults' "$main"; then
+  cat >> "$main" <<'EOF2'
+[include]
+    path = ~/.config/git/git-defaults
+
+EOF2
+fi
+
+# Git includeIf understands absolute paths and ~/ paths.
+# Use the user-facing path if it started with ~, otherwise the normalized absolute path.
+if [[ "$folder_input" == "~/"* ]]; then
+  gitdir_pattern="$folder_input/"
+else
+  gitdir_pattern="$folder/"
+fi
+
+if ! grep -qF "gitdir:$gitdir_pattern" "$main"; then
+  cat >> "$main" <<EOF2
+
+[includeIf "gitdir:$gitdir_pattern"]
+    path = ~/.config/git/contexts/$ctx.gitconfig
+EOF2
+fi
+
+ssh_config="$HOME/.ssh/config"
+touch "$ssh_config"
+chmod 600 "$ssh_config"
+
+append_ssh_host "$ssh_config" "$github_alias" "github.com" "$key"
+append_ssh_host "$ssh_config" "$gitlab_alias" "$gitlab_host" "$key"
+
+if [[ -n "$github_prefixes" ]]; then
+  while IFS= read -r raw; do
+    prefix="$(trim "$raw")"
+    append_rewrite "$main" "$github_alias" "github.com" "$prefix"
+  done < <(printf '%s\n' "$github_prefixes" | tr ',' '\n')
+fi
+
+if [[ -n "$gitlab_prefixes" ]]; then
+  while IFS= read -r raw; do
+    prefix="$(trim "$raw")"
+    append_rewrite "$main" "$gitlab_alias" "$gitlab_host" "$prefix"
+  done < <(printf '%s\n' "$gitlab_prefixes" | tr ',' '\n')
+fi
+
+mkdir -p "$folder"
+
+cat <<EOF2
+
+Additional Git context '$ctx' created.
+
+Context folder:
+  $folder
+
+Context config:
+  $config_file
+
+Context SSH key:
+  $key
+
+GitHub SSH alias:
+  $github_alias -> github.com
+
+GitLab SSH alias:
+  $gitlab_alias -> $gitlab_host
+
+Add this public key to the matching GitHub/GitLab accounts manually:
+
+$(cat "$key.pub")
+
+Suggested checks:
+  cd "$folder"
+  git config --show-origin user.email
+  ssh -T git@$github_alias
+  ssh -T git@$gitlab_alias
+
+Clone rewrite examples, if prefixes were configured:
+  git clone https://github.com/<configured-prefix>/<repo>.git
+  git clone https://$gitlab_host/<configured-prefix>/<repo>.git
+
+If you left prefixes empty, that is fine.
+The context still applies to repos under:
+  $folder
+
+EOF2

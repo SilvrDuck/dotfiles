@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-api-keys
+
+Interactive setup for local per-machine API key env files.
+Opens provider key pages, accepts pasted keys, and writes chmod 600 files under:
+  ~/.config/dotfiles/secrets/env.d
+HELP
+  exit 0
+fi
+
+open_url() {
+  local url="$1"
+  if command -v open >/dev/null 2>&1; then
+    open "$url"
+  elif command -v xdg-open >/dev/null 2>&1; then
+    xdg-open "$url" >/dev/null 2>&1 &
+  else
+    echo "Open manually: $url"
+  fi
+}
+
+ask_key() {
+  local name="$1" env_name="$2" url="$3" file="$4"
+  local ans key
+  read -r -p "Set up $name? [y/N] " ans
+  [[ "$ans" =~ ^[Yy]([Ee][Ss])?$ ]] || return 0
+
+  open_url "$url"
+  echo "Paste $env_name, or leave empty to skip writing it."
+  read -r -s -p "$env_name: " key
+  echo
+  [[ -n "$key" ]] || return 0
+
+  cat > "$file" <<EOF2
+export $env_name='$key'
+EOF2
+  chmod 600 "$file"
+  echo "Wrote $file"
+}
+
+base="$HOME/.config/dotfiles/secrets/env.d"
+mkdir -p "$base"
+chmod 700 "$HOME/.config/dotfiles" "$HOME/.config/dotfiles/secrets" "$base" 2>/dev/null || true
+
+ask_key "Anthropic" "ANTHROPIC_API_KEY" "https://console.anthropic.com/settings/keys" "$base/anthropic.zsh"
+ask_key "OpenAI" "OPENAI_API_KEY" "https://platform.openai.com/api-keys" "$base/openai.zsh"
+ask_key "OpenRouter" "OPENROUTER_API_KEY" "https://openrouter.ai/settings/keys" "$base/openrouter.zsh"
+ask_key "GitHub token" "GITHUB_TOKEN" "https://github.com/settings/tokens" "$base/github.zsh"
+ask_key "Google Gemini" "GEMINI_API_KEY" "https://aistudio.google.com/app/apikey" "$base/gemini.zsh"
+ask_key "Mistral" "MISTRAL_API_KEY" "https://console.mistral.ai/api-keys" "$base/mistral.zsh"
+
+echo "Done. Restart your shell or run: exec zsh"
