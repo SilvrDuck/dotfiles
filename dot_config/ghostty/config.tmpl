@@ -1,0 +1,37 @@
+{{ if .is_mac -}}
+{{- if stat "/opt/homebrew/bin/zsh" -}}
+command = /opt/homebrew/bin/zsh --login
+{{- else if stat "/usr/local/bin/zsh" -}}
+command = /usr/local/bin/zsh --login
+{{- else -}}
+command = /bin/zsh --login
+{{- end }}
+{{ else -}}
+command = /usr/bin/env zsh --login
+{{- end }}
+
+font-family = "JetBrainsMono Nerd Font"
+font-size = 14
+
+theme = Nord
+
+background-opacity = 0.97
+window-padding-x = 12
+window-padding-y = 8
+
+cursor-style = block
+cursor-style-blink = false
+
+shell-integration = zsh
+shell-integration-features = sudo,cursor
+
+clipboard-read = allow
+clipboard-write = allow
+copy-on-select = clipboard
+
+{{ if .is_mac -}}
+macos-titlebar-style = tabs
+macos-option-as-alt = true
+{{- end }}
+
+confirm-close-surface = false
