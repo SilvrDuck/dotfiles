@@ -1,0 +1,9 @@
+"$schema" = "https://starship.rs/config-schema.json"
+
+add_newline = false
+format = "$all$character "
+
+[character]
+success_symbol = "[❯](bold #a3be8c)"
+error_symbol = "[✘](bold #bf616a)"
+vimcmd_symbol = "[■](bold #b48ead)"
