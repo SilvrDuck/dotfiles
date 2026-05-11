@@ -35,6 +35,7 @@ packages:
     desktop:
       - ghostty
       - font-jetbrains-mono-nerd-font
+      - obsidian
 
     nvim:
       - neovim
@@ -90,3 +91,8 @@ packages:
 
     lazygit:
       apt_manual: lazygit_release
+
+    obsidian:
+      darwin_kind: cask
+      pacman_aur: obsidian
+      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
