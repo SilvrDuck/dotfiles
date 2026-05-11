@@ -17,51 +17,7 @@ fi
 {{ end }}
 {{ end }}
 
-install_brew() {
-  local kind="$1"
-  local name="$2"
-
-  if [ "$kind" = "cask" ]; then
-    echo "[brew cask] $name"
-    brew install --cask "$name" || echo "[brew cask] skipped or failed: $name"
-  else
-    echo "[brew] $name"
-    brew install "$name" || echo "[brew] skipped or failed: $name"
-  fi
-}
-
-install_pacman() {
-  local name="$1"
-  echo "[pacman] $name"
-  $SUDO pacman -S --needed --noconfirm "$name" || echo "[pacman] skipped or failed: $name"
-}
-
-install_yay() {
-  local name="$1"
-
-  if ! command -v yay >/dev/null 2>&1; then
-    cat >&2 <<'YAY'
-[packages] AUR package wanted, but yay is not installed.
-Install yay manually if you want AUR packages, then rerun: chezmoi apply
-
-Typical Arch steps:
-  sudo pacman -S --needed git base-devel
-  git clone https://aur.archlinux.org/yay.git /tmp/yay
-  cd /tmp/yay
-  makepkg -si
-YAY
-    return 0
-  fi
-
-  echo "[yay] $name"
-  yay -S --needed --noconfirm "$name" || echo "[yay] skipped or failed: $name"
-}
-
-install_apt() {
-  local name="$1"
-  echo "[apt] $name"
-  $SUDO apt-get install -y "$name" || echo "[apt] skipped or failed: $name"
-}
+{{ template "package-manager-helpers.sh" . }}
 
 {{ if eq .chezmoi.os "darwin" }}
 if [ -x /opt/homebrew/bin/brew ]; then
@@ -104,6 +60,8 @@ if command -v pacman >/dev/null 2>&1; then
 elif command -v apt-get >/dev/null 2>&1; then
   $SUDO apt-get update || true
 
+{{ template "apt-manual-installers.sh" . }}
+
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $manual := "" }}
@@ -112,30 +70,21 @@ elif command -v apt-get >/dev/null 2>&1; then
 {{ with (index . "apt_manual") }}{{ $manual = . }}{{ end }}
 {{ end }}
 {{ if eq $manual "antidote_git" }}
-  if [ ! -r "$HOME/.local/share/antidote/antidote.zsh" ]; then
-    echo "[manual] antidote"
-    rm -rf "$HOME/.local/share/antidote"
-    git clone --depth 1 https://github.com/mattmc3/antidote.git "$HOME/.local/share/antidote" || true
-  fi
+  install_manual_antidote
 {{ else if eq $manual "neovim_tarball" }}
-  # Debian/Ubuntu apt nvim is years behind (often 0.7.x); LazyVim needs >=0.8.
-  # Drop the official Linux tarball into /opt and symlink onto /usr/local/bin.
-  echo "[manual] neovim (tarball)"
-  arch=$(uname -m)
-  case "$arch" in
-    x86_64)  nvim_asset=nvim-linux-x86_64 ;;
-    aarch64) nvim_asset=nvim-linux-arm64 ;;
-    *) echo "[manual] neovim: unsupported arch $arch, skipping"; nvim_asset="" ;;
-  esac
-  if [ -n "$nvim_asset" ]; then
-    nvim_tmp=$(mktemp -d)
-    curl -fsSL -o "$nvim_tmp/nvim.tar.gz" "https://github.com/neovim/neovim/releases/latest/download/${nvim_asset}.tar.gz" \
-      && $SUDO rm -rf "/opt/${nvim_asset}" \
-      && $SUDO tar -C /opt -xzf "$nvim_tmp/nvim.tar.gz" \
-      && $SUDO ln -sf "/opt/${nvim_asset}/bin/nvim" /usr/local/bin/nvim \
-      || echo "[manual] neovim: install failed"
-    rm -rf "$nvim_tmp"
-  fi
+  install_manual_neovim
+{{ else if eq $manual "starship_script" }}
+  install_manual_starship
+{{ else if eq $manual "mise_script" }}
+  install_manual_mise
+{{ else if eq $manual "eza_release" }}
+  install_manual_eza
+{{ else if eq $manual "carapace_release" }}
+  install_manual_carapace
+{{ else if eq $manual "lazygit_release" }}
+  install_manual_lazygit
+{{ else if eq $manual "pay_respects_release" }}
+  install_manual_pay_respects
 {{ else }}
   install_apt {{ $name | quote }}
 {{ end }}
@@ -150,29 +99,4 @@ fi
 # AI CLIs
 # -----------------------------------------------------------------------------
 
-cat <<'AIINSTALL'
-[packages] Installing AI agents from upstream install scripts, best-effort.
-This is intentional: Claude Code, OpenCode, and Pi are core to this setup.
-Review these URLs if that ever feels wrong.
-AIINSTALL
-
-install_pi() {
-  # Needs a custom install function
-  if command -v pi >/dev/null 2>&1; then
-    return 0
-  fi
-
-  echo "[npm] @earendil-works/pi-coding-agent"
-
-  if command -v mise >/dev/null 2>&1; then
-    mise x node@lts -- npm install -g @earendil-works/pi-coding-agent || true
-  elif command -v npm >/dev/null 2>&1; then
-    npm install -g @earendil-works/pi-coding-agent || true
-  else
-    echo "[pi] skipped: npm or mise is required"
-  fi
-}
-
-command -v claude >/dev/null 2>&1 || curl -fsSL https://claude.ai/install.sh | bash || true
-command -v opencode >/dev/null 2>&1 || curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path || true
-install_pi
+{{ template "ai-cli-installers.sh" . }}

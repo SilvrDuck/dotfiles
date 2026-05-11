@@ -62,9 +62,6 @@ packages:
       pacman_aur: zsh-antidote
       apt_manual: antidote_git
 
-    carapace:
-      pacman_aur: carapace-bin
-
     tree-sitter:
       apt: tree-sitter-cli
 
@@ -74,3 +71,20 @@ packages:
     pay-respects:
       darwin: timescam/homebrew-tap/pay-respects
       pacman_aur: pay-respects-bin
+      apt_manual: pay_respects_release
+
+    starship:
+      apt_manual: starship_script
+
+    mise:
+      apt_manual: mise_script
+
+    eza:
+      apt_manual: eza_release
+
+    carapace:
+      pacman_aur: carapace-bin
+      apt_manual: carapace_release
+
+    lazygit:
+      apt_manual: lazygit_release
