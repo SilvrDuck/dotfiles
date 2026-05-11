@@ -20,7 +20,7 @@ The repo is built to stay lean. When making changes, hold these lines:
 
 ALWAYS consult your chezmoi skill. Be extremely question forward. Any doubt, ask the user. The user wants lean no bullshit, standard stuff. If you have to do convoluted stuff to satisfy a user request, let them know and ask for guidance.
 
-After editing source files, proactively offer to run the lifecycle for the user: `chezmoi diff` (dry-run preview), then `chezmoi apply`, then a git commit with a sensible message. Ask once before kicking it off; don't run them silently.
+After editing source files, proactively offer to run the lifecycle for the user: `chezmoi diff` (dry-run preview), then `chezmoi apply`, then a git commit with a sensible message, then `git push`. Ask once before kicking it off; don't run them silently. Always follow each add/commit round with a push.
 
 ## Architecture
 
