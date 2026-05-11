@@ -227,6 +227,7 @@ alias top='btop'  # better top
 alias du='dust'  # better du
 alias ps='procs'  # better ps
 alias lg='lazygit'  # git UI
+ob() { cd ~/vaults/main && nvim "${@:-.}"; }  # open vault in nvim
 
 command -v claude >/dev/null && alias cc='claude'  # short Claude
 
