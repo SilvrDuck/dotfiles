@@ -42,6 +42,7 @@ setopt INTERACTIVE_COMMENTS  # allow comments
 
 zstyle ':completion:*' menu no  # let fzf-tab own menu
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # case-insensitive
+zstyle ':completion:*:-command-:*' tag-order 'commands functions builtins reserved-words aliases'  # no env vars in command position
 zstyle ':fzf-tab:*' fzf-flags --height=40% --reverse --border  # compact UI
 
 # -----------------------------------------------------------------------------
