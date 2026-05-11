@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-keyboard-layout
+
+One-time EurKEY keyboard setup.
+
+macOS:
+  Installs EurKEY Next v1.4 from GitHub releases into:
+    ~/Library/Keyboard Layouts
+
+Linux:
+  Checks whether the EurKEY XKB layout is available.
+  Prints the commands to apply it for X11/desktop environments.
+
+After macOS install, log out and back in, then add EurKEY Next in:
+  System Settings -> Keyboard -> Input Sources
+HELP
+  exit 0
+fi
+
+case "$(uname -s)" in
+  Darwin)
+    if ! command -v jq >/dev/null 2>&1; then
+      echo "jq is required. Run chezmoi apply first so packages are installed."
+      exit 1
+    fi
+
+    tmpdir="$(mktemp -d)"
+    trap 'rm -rf "$tmpdir"' EXIT
+
+    echo "[eurkey] Fetching EurKEY Next v1.4 release metadata"
+    dmg_url="$(
+      curl -fsSL https://api.github.com/repos/felixfoertsch/EurKEY-Next/releases/tags/v1.4 \
+        | jq -r '.assets[] | select(.name | test("\\.dmg$")) | .browser_download_url' \
+        | head -n 1
+    )"
+
+    if [[ -z "$dmg_url" || "$dmg_url" == "null" ]]; then
+      echo "Could not find a .dmg asset for EurKEY Next v1.4."
+      echo "Open manually: https://github.com/felixfoertsch/EurKEY-Next/releases/tag/v1.4"
+      exit 1
+    fi
+
+    echo "[eurkey] Downloading $dmg_url"
+    curl -fL "$dmg_url" -o "$tmpdir/EurKEY-Next.dmg"
+
+    echo "[eurkey] Mounting DMG"
+    mount_dir="$tmpdir/mnt"
+    mkdir -p "$mount_dir"
+    hdiutil attach "$tmpdir/EurKEY-Next.dmg" -mountpoint "$mount_dir" -nobrowse -quiet
+
+    layout_dir="$HOME/Library/Keyboard Layouts"
+    mkdir -p "$layout_dir"
+
+    bundle_path="$(find "$mount_dir" -name 'EurKEY-Next.bundle' -maxdepth 3 -print -quit)"
+
+    if [[ -z "$bundle_path" ]]; then
+      hdiutil detach "$mount_dir" -quiet || true
+      echo "Could not find EurKEY-Next.bundle inside the DMG."
+      exit 1
+    fi
+
+    echo "[eurkey] Installing bundle to $layout_dir"
+    rm -rf "$layout_dir/EurKEY-Next.bundle"
+    cp -R "$bundle_path" "$layout_dir/"
+
+    hdiutil detach "$mount_dir" -quiet || true
+
+    cat <<'DONE'
+
+EurKEY Next v1.4 installed.
+
+Now:
+  1. Log out and back in, or restart.
+  2. Open System Settings -> Keyboard -> Input Sources.
+  3. Add "EurKEY Next".
+  4. Select the v1.4 layout.
+
+DONE
+    ;;
+
+  Linux)
+    echo "[eurkey] Checking XKB layouts"
+
+    if command -v localectl >/dev/null 2>&1; then
+      echo
+      echo "Available EurKEY-like layouts:"
+      localectl list-x11-keymap-layouts | grep -Ei '^(eu|eurkey)$' || true
+    fi
+
+    if [ -d /usr/share/X11/xkb ]; then
+      echo
+      echo "XKB data exists at /usr/share/X11/xkb."
+    else
+      echo
+      echo "XKB data not found. Install your distro XKB package:"
+      echo "  Arch/pacman: xkeyboard-config"
+      echo "  Debian/Ubuntu/apt: xkb-data"
+    fi
+
+    cat <<'LINUX'
+
+For an X11 session, try:
+
+  setxkbmap eu
+
+If your distro uses the legacy EurKEY package/layout name, try:
+
+  setxkbmap eurkey
+
+For persistent setup, use your desktop environment keyboard settings.
+
+On GNOME/Ubuntu, EurKEY may be hidden until extended input sources are enabled:
+
+  gsettings set org.gnome.desktop.input-sources show-all-sources true
+
+On Hyprland/Omarchy, set it in the compositor input config rather than relying on setxkbmap.
+
+LINUX
+    ;;
+
+  *)
+    echo "Unsupported OS."
+    exit 1
+    ;;
+esac

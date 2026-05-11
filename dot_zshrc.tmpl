@@ -21,7 +21,7 @@ fi
 # PATH
 # -----------------------------------------------------------------------------
 
-export PATH="$HOME/.local/bin:$PATH"  # user bins first
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"  # user bins first
 
 # -----------------------------------------------------------------------------
 # History
@@ -101,6 +101,8 @@ KEYTIMEOUT=20  # faster key sequences
 
 bindkey -M viins 'jk' vi-cmd-mode  # jk escapes insert
 bindkey -M viins 'kj' vi-cmd-mode  # kj escapes insert
+bindkey -M viins 'ç' fzf-cd-widget  # Alt+C eurkey override
+bindkey -M vicmd 'ç' fzf-cd-widget  # Alt+C eurkey override
 
 function zle-keymap-select zle-line-init {
   case $KEYMAP in
@@ -174,6 +176,8 @@ export FZF_CTRL_R_OPTS="
   --bind 'ctrl-/:toggle-preview'
   --preview-window=down,3,wrap
 "  # history picker layout
+
+bindkey 'ç' fzf-cd-widget  # Alt+C eurkey override
 
 # -----------------------------------------------------------------------------
 # Directory jumping

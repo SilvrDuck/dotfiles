@@ -70,6 +70,10 @@ elif [ -x /usr/local/bin/brew ]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+# -----------------------------------------------------------------------------
+# Install packages
+# -----------------------------------------------------------------------------
+
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $kind := "brew" }}
@@ -122,6 +126,19 @@ else
   echo "[packages] Supported Linux package managers: pacman or apt-get. Continuing without package install." >&2
 fi
 {{ end }}
+
+# -----------------------------------------------------------------------------
+# mise runtimes
+# -----------------------------------------------------------------------------
+
+if command -v mise >/dev/null 2>&1; then
+  echo "[mise] installing configured runtimes"
+  mise install || echo "[mise] runtime install skipped or failed"
+fi
+
+# -----------------------------------------------------------------------------
+# AI CLIs
+# -----------------------------------------------------------------------------
 
 cat <<'AIINSTALL'
 [packages] Installing AI agents from upstream install scripts, best-effort.
