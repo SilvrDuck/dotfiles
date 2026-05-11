@@ -35,6 +35,7 @@ packages:
 
     nvim:
       - neovim
+      - tree-sitter
 
   overrides:
     gh:
@@ -60,3 +61,6 @@ packages:
 
     carapace:
       pacman_aur: carapace-bin
+
+    tree-sitter:
+      apt: tree-sitter-cli
