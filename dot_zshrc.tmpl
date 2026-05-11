@@ -192,6 +192,16 @@ command -v zoxide >/dev/null && eval "$(zoxide init zsh --cmd cd)"  # smart cd
 command -v mise >/dev/null && eval "$(mise activate zsh)"  # runtime shims
 
 # -----------------------------------------------------------------------------
+# Command correction
+# -----------------------------------------------------------------------------
+
+export _PR_AI_DISABLE=1  # opt out of pay-respects AI suggestions
+if command -v pay-respects >/dev/null; then  # pay-respects installed
+  eval "$(pay-respects zsh --alias f)"  # rerun corrected command via `f`
+  alias F=f fuck=f  # extra triggers
+fi
+
+# -----------------------------------------------------------------------------
 # Modern CLI aliases
 # -----------------------------------------------------------------------------
 

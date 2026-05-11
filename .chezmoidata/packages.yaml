@@ -28,6 +28,8 @@ packages:
       - btop
       - dust
       - procs
+      - watch
+      - pay-respects
       - mise
 
     desktop:
@@ -68,3 +70,7 @@ packages:
 
     neovim:
       apt_manual: neovim_tarball
+
+    pay-respects:
+      darwin: timescam/homebrew-tap/pay-respects
+      pacman_aur: pay-respects-bin
