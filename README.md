@@ -24,7 +24,7 @@ $(chezmoi source-path)/scripts/setup-keyboard-layout
 Quickest, runs every container start:
 
 ```json
-"postCreateCommand": "sh -c \"$(curl -fsLS https://get.chezmoi.io)\" -- init --one-shot --apply --promptChoice \"Machine kind=devcontainer\" SilvrDuck"
+"postCreateCommand": "MACHINE_KIND=devcontainer sh -c \"$(curl -fsLS https://get.chezmoi.io)\" -- init --one-shot --apply SilvrDuck"
 ```
 
 ### Faster rebuilds: bake the bootstrap into the image
@@ -46,7 +46,7 @@ RUN if ! id -u vscode >/dev/null 2>&1; then \
     fi
 
 USER vscode
-RUN sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply --promptChoice "Machine kind=devcontainer" SilvrDuck
+RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
 ```
 
 `.devcontainer/devcontainer.json`:
