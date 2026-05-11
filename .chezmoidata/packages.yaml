@@ -1,0 +1,62 @@
+packages:
+  groups:
+    core:
+      - git
+      - gh
+      - jq
+      - yq
+      - gitleaks
+      - curl
+      - ca-certificates
+
+    shell:
+      - zsh
+      - antidote
+      - starship
+      - fzf
+      - zoxide
+      - carapace
+
+    cli:
+      - eza
+      - bat
+      - fd
+      - ripgrep
+      - git-delta
+      - lazygit
+      - btop
+      - dust
+      - procs
+      - mise
+
+    desktop:
+      - ghostty
+      - font-jetbrains-mono-nerd-font
+
+    nvim:
+      - neovim
+
+  overrides:
+    gh:
+      pacman: github-cli
+
+    fd:
+      apt: fd-find
+
+    dust:
+      apt: du-dust
+
+    font-jetbrains-mono-nerd-font:
+      darwin_kind: cask
+      pacman: ttf-jetbrains-mono-nerd
+      apt: fonts-jetbrains-mono
+
+    ghostty:
+      darwin_kind: cask
+
+    antidote:
+      pacman_aur: zsh-antidote
+      apt_manual: antidote_git
+
+    carapace:
+      pacman_aur: carapace-bin

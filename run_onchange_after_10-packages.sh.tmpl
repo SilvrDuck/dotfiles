@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# machine_kind: {{ .machine_kind }}
+# package data hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
+
+if command -v sudo >/dev/null 2>&1; then
+  SUDO=sudo
+else
+  SUDO=
+fi
+
+{{ $allTools := list }}
+{{ range $groupName, $tools := .packages.groups }}
+{{ range $tool := $tools }}
+{{ $allTools = append $allTools $tool }}
+{{ end }}
+{{ end }}
+
+install_brew() {
+  local kind="$1"
+  local name="$2"
+
+  if [ "$kind" = "cask" ]; then
+    echo "[brew cask] $name"
+    brew install --cask "$name" || echo "[brew cask] skipped or failed: $name"
+  else
+    echo "[brew] $name"
+    brew install "$name" || echo "[brew] skipped or failed: $name"
+  fi
+}
+
+install_pacman() {
+  local name="$1"
+  echo "[pacman] $name"
+  $SUDO pacman -S --needed --noconfirm "$name" || echo "[pacman] skipped or failed: $name"
+}
+
+install_yay() {
+  local name="$1"
+
+  if ! command -v yay >/dev/null 2>&1; then
+    cat >&2 <<'YAY'
+[packages] AUR package wanted, but yay is not installed.
+Install yay manually if you want AUR packages, then rerun: chezmoi apply
+
+Typical Arch steps:
+  sudo pacman -S --needed git base-devel
+  git clone https://aur.archlinux.org/yay.git /tmp/yay
+  cd /tmp/yay
+  makepkg -si
+YAY
+    return 0
+  fi
+
+  echo "[yay] $name"
+  yay -S --needed --noconfirm "$name" || echo "[yay] skipped or failed: $name"
+}
+
+install_apt() {
+  local name="$1"
+  echo "[apt] $name"
+  $SUDO apt-get install -y "$name" || echo "[apt] skipped or failed: $name"
+}
+
+{{ if eq .chezmoi.os "darwin" }}
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+
+{{ range $tool := $allTools }}
+{{ $name := $tool }}
+{{ $kind := "brew" }}
+{{ with (index $.packages.overrides $tool) }}
+{{ with (index . "darwin") }}{{ $name = . }}{{ end }}
+{{ with (index . "darwin_kind") }}{{ $kind = . }}{{ end }}
+{{ end }}
+install_brew {{ $kind | quote }} {{ $name | quote }}
+{{ end }}
+
+{{ else if eq .chezmoi.os "linux" }}
+if command -v pacman >/dev/null 2>&1; then
+
+{{ range $tool := $allTools }}
+{{ $name := $tool }}
+{{ $aur := "" }}
+{{ with (index $.packages.overrides $tool) }}
+{{ with (index . "pacman") }}{{ $name = . }}{{ end }}
+{{ with (index . "pacman_aur") }}{{ $aur = . }}{{ end }}
+{{ end }}
+{{ if $aur }}
+  install_yay {{ $aur | quote }}
+{{ else }}
+  install_pacman {{ $name | quote }}
+{{ end }}
+{{ end }}
+
+elif command -v apt-get >/dev/null 2>&1; then
+  $SUDO apt-get update || true
+
+{{ range $tool := $allTools }}
+{{ $name := $tool }}
+{{ $manual := "" }}
+{{ with (index $.packages.overrides $tool) }}
+{{ with (index . "apt") }}{{ $name = . }}{{ end }}
+{{ with (index . "apt_manual") }}{{ $manual = . }}{{ end }}
+{{ end }}
+{{ if eq $manual "antidote_git" }}
+  if [ ! -r "$HOME/.local/share/antidote/antidote.zsh" ]; then
+    echo "[manual] antidote"
+    rm -rf "$HOME/.local/share/antidote"
+    git clone --depth 1 https://github.com/mattmc3/antidote.git "$HOME/.local/share/antidote" || true
+  fi
+{{ else }}
+  install_apt {{ $name | quote }}
+{{ end }}
+{{ end }}
+
+else
+  echo "[packages] Supported Linux package managers: pacman or apt-get. Continuing without package install." >&2
+fi
+{{ end }}
+
+cat <<'AIINSTALL'
+[packages] Installing AI agents from upstream install scripts, best-effort.
+This is intentional: Claude Code, OpenCode, and Pi are core to this setup.
+Review these URLs if that ever feels wrong.
+AIINSTALL
+
+install_pi() {
+  # Needs a custom install function
+  if command -v pi >/dev/null 2>&1; then
+    return 0
+  fi
+
+  echo "[npm] @earendil-works/pi-coding-agent"
+
+  if command -v mise >/dev/null 2>&1; then
+    mise x node@lts -- npm install -g @earendil-works/pi-coding-agent || true
+  elif command -v npm >/dev/null 2>&1; then
+    npm install -g @earendil-works/pi-coding-agent || true
+  else
+    echo "[pi] skipped: npm or mise is required"
+  fi
+}
+
+command -v claude >/dev/null 2>&1 || curl -fsSL https://claude.ai/install.sh | bash || true
+command -v opencode >/dev/null 2>&1 || curl -fsSL https://opencode.ai/install | bash || true
+install_pi

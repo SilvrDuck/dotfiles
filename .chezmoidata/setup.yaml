@@ -1,9 +1,0 @@
-machine_kinds:
-  desktop:
-    description: "Normal personal desktop setup"
-
-  omarchy:
-    description: "Attemps to not override Omarchy stuff"
-
-  devcontainer:
-    description: "Headless coding container"

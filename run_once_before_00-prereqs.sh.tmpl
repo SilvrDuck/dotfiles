@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# If MacOS: installs brew
+# If Linux: check for apt or pacman
+set -euo pipefail
+
+if command -v sudo >/dev/null 2>&1; then
+  SUDO=sudo
+else
+  SUDO=
+fi
+
+{{ if eq .chezmoi.os "darwin" -}}
+if ! command -v brew >/dev/null 2>&1; then
+  echo "[prereqs] Installing Homebrew"
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+if [ -x /opt/homebrew/bin/brew ]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
+elif [ -x /usr/local/bin/brew ]; then
+  eval "$(/usr/local/bin/brew shellenv)"
+fi
+{{ else if eq .chezmoi.os "linux" -}}
+if command -v pacman >/dev/null 2>&1; then
+  $SUDO pacman -Sy --needed --noconfirm git curl ca-certificates || true
+elif command -v apt-get >/dev/null 2>&1; then
+  $SUDO apt-get update || true
+  $SUDO apt-get install -y curl git ca-certificates build-essential procps file || true
+else
+  echo "[prereqs] Supported Linux package managers: pacman or apt-get. Continuing without package prereqs." >&2
+fi
+{{ end -}}
