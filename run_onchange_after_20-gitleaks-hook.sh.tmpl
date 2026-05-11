@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git -C "{{ .chezmoi.sourceDir }}" rev-parse --show-toplevel 2>/dev/null || true)"
+[ -n "$REPO_ROOT" ] || exit 0
+
+HOOK_DIR="$REPO_ROOT/.git/hooks"
+HOOK_FILE="$HOOK_DIR/pre-commit"
+CONFIG_FILE="$REPO_ROOT/.gitleaks.toml"
+
+[ -d "$HOOK_DIR" ] || exit 0
+
+cat > "$HOOK_FILE" <<EOF2
+#!/bin/sh
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks is required for commits in this repo."
+  exit 1
+fi
+gitleaks git --config "$CONFIG_FILE" --pre-commit --staged --redact --verbose
+EOF2
+
+chmod +x "$HOOK_FILE"
