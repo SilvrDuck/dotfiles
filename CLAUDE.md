@@ -26,6 +26,8 @@ After editing source files, proactively offer to run the lifecycle for the user:
 
 Before asking to commit, run `git diff` (and `git diff --staged` if anything is staged) and summarize it in 1–3 lines — files touched + what changed — so the user can approve without opening the diff themselves. `git diff` / `git status` / `git log` are pre-approved in `.claude/settings.json`; commits, pushes, and anything mutating still prompt.
 
+If the working tree has dirty files or untracked paths you didn't touch, proactively flag them and ask whether to include them in the commit before staging. Don't silently bundle, and don't silently leave them behind — surface the choice.
+
 ## Architecture
 
 Bootstrap chain (numeric prefix = order):
