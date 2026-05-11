@@ -117,6 +117,25 @@ elif command -v apt-get >/dev/null 2>&1; then
     rm -rf "$HOME/.local/share/antidote"
     git clone --depth 1 https://github.com/mattmc3/antidote.git "$HOME/.local/share/antidote" || true
   fi
+{{ else if eq $manual "neovim_tarball" }}
+  # Debian/Ubuntu apt nvim is years behind (often 0.7.x); LazyVim needs >=0.8.
+  # Drop the official Linux tarball into /opt and symlink onto /usr/local/bin.
+  echo "[manual] neovim (tarball)"
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64)  nvim_asset=nvim-linux-x86_64 ;;
+    aarch64) nvim_asset=nvim-linux-arm64 ;;
+    *) echo "[manual] neovim: unsupported arch $arch, skipping"; nvim_asset="" ;;
+  esac
+  if [ -n "$nvim_asset" ]; then
+    nvim_tmp=$(mktemp -d)
+    curl -fsSL -o "$nvim_tmp/nvim.tar.gz" "https://github.com/neovim/neovim/releases/latest/download/${nvim_asset}.tar.gz" \
+      && $SUDO rm -rf "/opt/${nvim_asset}" \
+      && $SUDO tar -C /opt -xzf "$nvim_tmp/nvim.tar.gz" \
+      && $SUDO ln -sf "/opt/${nvim_asset}/bin/nvim" /usr/local/bin/nvim \
+      || echo "[manual] neovim: install failed"
+    rm -rf "$nvim_tmp"
+  fi
 {{ else }}
   install_apt {{ $name | quote }}
 {{ end }}

@@ -65,3 +65,6 @@ packages:
 
     tree-sitter:
       apt: tree-sitter-cli
+
+    neovim:
+      apt_manual: neovim_tarball
