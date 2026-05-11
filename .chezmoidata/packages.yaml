@@ -53,7 +53,9 @@ packages:
     font-jetbrains-mono-nerd-font:
       darwin_kind: cask
       pacman: ttf-jetbrains-mono-nerd
-      apt: fonts-jetbrains-mono
+      # apt's fonts-jetbrains-mono is the regular font without nerd glyphs,
+      # so pull the official Nerd Font tarball into ~/.local/share/fonts.
+      apt_manual: jetbrains_mono_nerd
 
     ghostty:
       darwin_kind: cask
