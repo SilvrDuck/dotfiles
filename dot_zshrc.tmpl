@@ -184,6 +184,7 @@ bindkey 'ç' fzf-cd-widget  # Alt+C eurkey override
 # Directory jumping
 # -----------------------------------------------------------------------------
 
+export _ZO_DOCTOR=0  # doctor's "init last" rule is a false positive here
 command -v zoxide >/dev/null && eval "$(zoxide init zsh --cmd cd)"  # smart cd
 
 # -----------------------------------------------------------------------------
