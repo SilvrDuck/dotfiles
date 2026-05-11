@@ -1,0 +1,43 @@
+[init]
+    defaultBranch = main
+
+[pull]
+    rebase = true
+
+[push]
+    autoSetupRemote = true
+    default = simple
+
+[rebase]
+    autoStash = true
+
+[fetch]
+    prune = true
+
+[diff]
+    colorMoved = default
+    algorithm = histogram
+
+[merge]
+    conflictstyle = zdiff3
+
+[core]
+    pager = delta
+    editor = nvim
+
+[interactive]
+    diffFilter = delta --color-only
+
+[delta]
+    navigate = true
+    side-by-side = true
+    line-numbers = true
+
+[rerere]
+    enabled = true
+
+[column]
+    ui = auto
+
+[branch]
+    sort = -committerdate
