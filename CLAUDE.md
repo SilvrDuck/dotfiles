@@ -15,12 +15,16 @@ The repo is built to stay lean. When making changes, hold these lines:
 - **Secrets are local-only, unencrypted, per-machine.** They live at `~/.config/dotfiles/secrets/env.d/*.zsh` (chmod 600), populated by `scripts/setup-api-keys`. Do NOT add chezmoi encryption for API keys.
 - **`scripts/` is repo-only, not installed.** It's listed in `.chezmoiignore.tmpl` and run manually from paths in the README. Do not add it to `$PATH` or move it under `dot_*`. Scripts are all interactive and minimal, self-documenting.
 - **LazyVim is fully owned by this repo on every machine kind, Omarchy included.** Omarchy gets to own the terminal/theme layer; nvim is ours.
+- **No line of config that only restates the default.** Override only what you're actually changing — every key in an `opts` block must be doing real work. Defaults are the favorite; they survive upgrades, they document themselves, and they keep diffs honest.
+- **Always research online before touching any tool's config.** Fetch the upstream docs (WebFetch / context7) to confirm current option names, defaults, and feel. No going from memory — option schemas drift, and "I think the default is X" leads to redundant or stale config lines. Quote the default you found so the user can sanity-check.
 
 ## Apply / iterate
 
 ALWAYS consult your chezmoi skill. Be extremely question forward. Any doubt, ask the user. The user wants lean no bullshit, standard stuff. If you have to do convoluted stuff to satisfy a user request, let them know and ask for guidance.
 
 After editing source files, proactively offer to run the lifecycle for the user: `chezmoi diff` (dry-run preview), then `chezmoi apply`, then a git commit with a sensible message, then `git push`. Ask once before kicking it off; don't run them silently. Always follow each add/commit round with a push.
+
+Before asking to commit, run `git diff` (and `git diff --staged` if anything is staged) and summarize it in 1–3 lines — files touched + what changed — so the user can approve without opening the diff themselves. `git diff` / `git status` / `git log` are pre-approved in `.claude/settings.json`; commits, pushes, and anything mutating still prompt.
 
 ## Architecture
 
