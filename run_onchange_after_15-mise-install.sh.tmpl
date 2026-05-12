@@ -5,9 +5,7 @@ set -euo pipefail
 
 if command -v mise >/dev/null 2>&1; then
   echo "[mise] installing configured runtimes"
-  # cd to $HOME so mise picks up the global config and not whatever untrusted
-  # project mise.toml lives in the user's current shell directory.
-  (cd "$HOME" && mise install) || echo "[mise] runtime install skipped or failed"
+  mise install || echo "[mise] runtime install skipped or failed"
 else
   echo "[mise] skipped: mise not installed"
 fi

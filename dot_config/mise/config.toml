@@ -5,3 +5,6 @@ node = "lts"
 [settings]
 idiomatic_version_file_enable_tools = ["python", "node"]
 python.uv_venv_auto = "source"
+# Auto-trust every mise.toml under home so the shell hook, `mise install`, and
+# `mise x` stop prompting per-project. Threat model: only clone repos I trust.
+trusted_config_paths = ["~"]
