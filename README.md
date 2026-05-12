@@ -55,7 +55,7 @@ RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- in
 ```jsonc
   "build": { "dockerfile": "Dockerfile" },
   "remoteUser": "vscode",
-  "postCreateCommand": "chezmoi update --apply || true"
+  "postCreateCommand": "chezmoi update --apply || true",
 ```
 
 ## Obsidian
