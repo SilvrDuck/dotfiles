@@ -73,7 +73,11 @@ fi
 # -----------------------------------------------------------------------------
 
 autoload -Uz compinit  # load completion init
-compinit  # initialize completion
+if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qNmh+24) ]]; then
+  compinit  # full audit + dump regen once a day
+else
+  compinit -C  # skip audit when dump is fresh
+fi
 
 # -----------------------------------------------------------------------------
 # Carapace
@@ -81,7 +85,13 @@ compinit  # initialize completion
 
 if command -v carapace >/dev/null; then  # rich completions available
   export CARAPACE_BRIDGES='zsh,fish,bash'  # completion bridges
-  source <(carapace _carapace)  # load carapace
+  cache="${ZDOTDIR:-$HOME}/.cache/carapace.zsh"  # init cache
+  if [[ ! -s $cache || $(command -v carapace) -nt $cache ]]; then
+    mkdir -p ${cache:h}  # ensure cache dir
+    carapace _carapace > $cache  # regen on binary change
+  fi
+  source $cache  # load cached init
+  unset cache
 fi
 
 # -----------------------------------------------------------------------------
