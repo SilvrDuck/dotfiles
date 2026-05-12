@@ -6,5 +6,6 @@ return {
     workspaces = {
       { name = "main", path = "~/vaults/main" },
     },
+    ui = { enable = false },  -- render-markdown.nvim handles visuals
   },
 }
