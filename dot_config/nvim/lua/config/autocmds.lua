@@ -121,3 +121,14 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
     end
   end,
 })
+
+-- Pull on entry: fire detached when nvim starts inside the vault so remote
+-- edits from other machines land soon after open. autoread reloads buffers.
+vim.api.nvim_create_autocmd("VimEnter", {
+  group = vault_group,
+  callback = function()
+    if vim.startswith(vim.fn.getcwd(), vault_root) then
+      vault_fire()
+    end
+  end,
+})
