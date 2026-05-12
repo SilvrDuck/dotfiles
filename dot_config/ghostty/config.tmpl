@@ -31,7 +31,8 @@ copy-on-select = clipboard
 
 {{ if .is_mac -}}
 macos-titlebar-style = tabs
-macos-option-as-alt = true
+# right Option = AltGr so EurKEY composes accents in nvim; left Option stays Meta for zsh word-jump
+macos-option-as-alt = left
 {{- end }}
 
 confirm-close-surface = false

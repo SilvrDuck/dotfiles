@@ -9,10 +9,32 @@
 
 -- LazyVim sets conceallevel=2 globally; that hides ```fences, *emphasis*, etc.
 -- in markdown. Show everything explicitly (Treesitter highlighting still applies).
+-- Personal spellfile lives inside the vault so `zg` additions sync across machines.
+local spellfile = vim.fn.expand("~/vaults/main/.spell/personal.utf-8.add")
+vim.fn.mkdir(vim.fn.fnamemodify(spellfile, ":h"), "p")
+
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "markdown" },
   callback = function()
     vim.opt_local.conceallevel = 0
+    vim.opt_local.spell = true
+    vim.opt_local.spelllang = { "fr", "en" }
+    vim.opt_local.spellfile = spellfile
+    -- Fold the YAML frontmatter block. Manual foldmethod (rather than reusing
+    -- treesitter's foldexpr) because LazyVim's fold setup didn't pick up the
+    -- (minus_metadata) addition reliably — manual `:fold` is unconditional.
+    -- Tradeoff: treesitter section folds are off for markdown; use `zf` to
+    -- create a section fold by hand if needed.
+    if vim.fn.getline(1) == "---" then
+      local last = vim.fn.line("$")
+      for i = 2, math.min(last, 100) do
+        if vim.fn.getline(i) == "---" then
+          vim.opt_local.foldmethod = "manual"
+          vim.cmd(string.format("silent! %d,%dfold", 1, i))
+          break
+        end
+      end
+    end
   end,
 })
 

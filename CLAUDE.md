@@ -57,7 +57,7 @@ Strict load order in `dot_zshrc.tmpl` — do not reorder:
 4. Carapace
 5. `fzf-tab` + widget-wrappers via `dot_zsh_plugins_after_compinit.txt`
 
-Universal escape is `jk` / `kj` — shell vi insert, nvim insert, AND nvim terminal mode. Keep these three bindings in sync.
+Universal escape is `jk` / `kj` — shell vi insert, nvim insert, nvim terminal, AND nvim visual/select. Keep these bindings in sync.
 
 Explicitly NOT in the stack: `zsh-autocomplete`, `zsh-vi-mode` plugin, Atuin, yazi-in-core. Don't reintroduce them without a strong reason.
 
