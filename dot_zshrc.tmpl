@@ -104,6 +104,9 @@ bindkey -M viins 'jk' vi-cmd-mode  # jk escapes insert
 bindkey -M viins 'kj' vi-cmd-mode  # kj escapes insert
 bindkey -M viins 'ç' fzf-cd-widget  # Alt+C eurkey override
 bindkey -M vicmd 'ç' fzf-cd-widget  # Alt+C eurkey override
+bindkey -M viins '^?' backward-delete-char  # backspace crosses lines
+bindkey -M viins '^H' backward-delete-char  # ditto (some terminals)
+bindkey -M viins '^W' backward-kill-word    # ctrl-w crosses lines
 
 function zle-keymap-select zle-line-init {
   case $KEYMAP in
