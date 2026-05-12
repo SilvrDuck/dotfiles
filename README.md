@@ -17,6 +17,7 @@ $(chezmoi source-path)/scripts/setup-git-default-context
 $(chezmoi source-path)/scripts/setup-git-additional-context
 $(chezmoi source-path)/scripts/setup-api-keys
 $(chezmoi source-path)/scripts/setup-keyboard-layout
+$(chezmoi source-path)/scripts/setup-obsidian-vault
 ```
 
 ## Devcontainers
