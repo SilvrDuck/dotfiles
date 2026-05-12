@@ -26,8 +26,8 @@ trap 'rm -rf "$LOCK"' EXIT INT TERM
 [ -d "$VAULT/.git" ] || { echo "[$(ts)] no vault at $VAULT, skipping" >&2; exit 0; }
 cd "$VAULT" || exit 1
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  git add -A
+if [ -n "$(git status --porcelain)" ]; then
+  git add -A  # includes untracked files; plain `git diff` misses those
   git -c user.name="vault-sync" -c user.email="vault-sync@local" \
       commit -m "vault-sync $(ts)" >/dev/null
 fi
