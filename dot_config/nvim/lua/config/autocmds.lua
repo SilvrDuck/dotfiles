@@ -13,13 +13,43 @@
 local spellfile = vim.fn.expand("~/vaults/main/.spell/personal.utf-8.add")
 vim.fn.mkdir(vim.fn.fnamemodify(spellfile, ":h"), "p")
 
+-- Hyphenated compounds (Status-bar, first-save) are treated as one token by
+-- vim's spell checker and flagged because they're not literal dict entries.
+-- Walk the buffer and accept any compound whose parts all pass the dict; real
+-- typos inside a compound (spel-checker) still fail. Session-only — no writes
+-- to the spellfile, refreshes on reopen.
+local function accept_hyphenated_compounds()
+  local seen = {}
+  for _, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
+    for compound in line:gmatch("%w+%-[%w%-]+") do
+      if not seen[compound] then
+        seen[compound] = true
+        local ok = true
+        for part in compound:gmatch("[^%-]+") do
+          local _, attr = unpack(vim.fn.spellbadword(part))
+          if attr == "bad" then
+            ok = false
+            break
+          end
+        end
+        if ok then pcall(vim.cmd, "silent! spellgood! " .. compound) end
+      end
+    end
+  end
+end
+
 vim.api.nvim_create_autocmd("FileType", {
   pattern = { "markdown" },
-  callback = function()
+  callback = function(args)
     vim.opt_local.conceallevel = 0
     vim.opt_local.spell = true
     vim.opt_local.spelllang = { "fr", "en" }
     vim.opt_local.spellfile = spellfile
+    accept_hyphenated_compounds()
+    vim.api.nvim_create_autocmd("BufWritePost", {
+      buffer = args.buf,
+      callback = accept_hyphenated_compounds,
+    })
     -- Fold the YAML frontmatter block. Manual foldmethod (rather than reusing
     -- treesitter's foldexpr) because LazyVim's fold setup didn't pick up the
     -- (minus_metadata) addition reliably — manual `:fold` is unconditional.

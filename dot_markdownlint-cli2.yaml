@@ -1,0 +1,5 @@
+# Global markdownlint-cli2 config. Lives at ~/.markdownlint-cli2.yaml so it
+# applies to every markdown file under $HOME (the linter walks up from each
+# file looking for this config).
+config:
+  MD013: false  # line-length — prose lines vary
