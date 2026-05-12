@@ -45,6 +45,36 @@ return {
           z = { bg = nord.bg1, fg = nord.inactive },
         },
       }
+
+      -- Single-letter mode (N/I/V/R/C/T/S). Visual variants all collapse to V
+      -- but the accent color already disambiguates line vs block.
+      opts.sections.lualine_a = {
+        { "mode", fmt = function(s) return s:sub(1, 1) end },
+      }
+
+      -- Truncate long branch names (e.g. task-3.4-python-ownership-end-to-end).
+      opts.sections.lualine_b = {
+        {
+          "branch",
+          fmt = function(s)
+            return #s > 20 and s:sub(1, 19) .. "…" or s
+          end,
+        },
+      }
+
+      -- Replace clock with attached LSP server name(s). Intentionally no
+      -- fallback: an empty Z is the signal that no LSP is attached.
+      opts.sections.lualine_z = {
+        function()
+          local clients = vim.lsp.get_clients({ bufnr = 0 })
+          if #clients == 0 then return "" end
+          local names = {}
+          for _, c in ipairs(clients) do
+            names[#names + 1] = c.name
+          end
+          return " " .. table.concat(names, " ")
+        end,
+      }
     end,
   },
 }
