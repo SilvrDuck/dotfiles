@@ -32,6 +32,8 @@ if [ -n "$(git status --porcelain)" ]; then
       commit -m "vault-sync $(ts)" >/dev/null
 fi
 
-git pull --rebase --autostash --quiet || { echo "[$(ts)] pull failed" >&2; exit 1; }
-git push --quiet                       || { echo "[$(ts)] push failed" >&2; exit 1; }
+echo "[$(ts)] pull:"
+git pull --rebase --autostash || { echo "[$(ts)] pull failed" >&2; exit 1; }
+echo "[$(ts)] push:"
+git push                      || { echo "[$(ts)] push failed" >&2; exit 1; }
 echo "[$(ts)] ok"

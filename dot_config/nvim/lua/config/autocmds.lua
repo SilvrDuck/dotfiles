@@ -138,18 +138,24 @@ vim.api.nvim_create_autocmd("BufWinEnter", {
   end,
 })
 
--- Vault auto-sync: fire ~/.local/bin/vault-sync (detached) when a file under
+-- Vault auto-sync: fire ~/.local/bin/vault-sync async when a file under
 -- ~/vaults/main is saved, debounced 2s. Flush any pending fire on nvim exit so
 -- :q after a save doesn't strand the last edits until the next cron tick.
--- Silently inert on machines without the daemon installed.
+-- Silently inert on machines without the daemon installed. Failures surface
+-- as a notification so a broken sync can't hide behind a detached process.
 local vault_script = vim.fn.expand("~/.local/bin/vault-sync")
 local vault_root = vim.fn.expand("~/vaults/main")
 local vault_timer
 
 local function vault_fire()
-  if vim.fn.executable(vault_script) == 1 then
-    vim.system({ vault_script }, { detach = true })
-  end
+  if vim.fn.executable(vault_script) ~= 1 then return end
+  vim.system({ vault_script }, { text = true }, function(obj)
+    if obj.code ~= 0 then
+      vim.schedule(function()
+        vim.notify("vault-sync failed:\n" .. (obj.stderr or obj.stdout or ""), vim.log.levels.ERROR)
+      end)
+    end
+  end)
 end
 
 local vault_group = vim.api.nvim_create_augroup("vault-sync", { clear = true })

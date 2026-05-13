@@ -1,9 +1,9 @@
 [Unit]
-Description=Run vault-sync every 10 minutes
+Description=Run vault-sync every 5 minutes
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=10min
+OnUnitActiveSec=5min
 AccuracySec=30s
 Unit=vault-sync.service
 
