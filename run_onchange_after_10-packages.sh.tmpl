@@ -102,3 +102,25 @@ fi
 # -----------------------------------------------------------------------------
 
 {{ template "ai-cli-installers.sh" . }}
+
+# -----------------------------------------------------------------------------
+# Default login shell -> zsh (Linux only; macOS uses its own flow)
+# -----------------------------------------------------------------------------
+
+{{ if eq .chezmoi.os "linux" }}
+zsh_path="$(command -v zsh || true)"
+if [ -n "$zsh_path" ]; then
+  current="$(getent passwd "$USER" 2>/dev/null | cut -d: -f7 || true)"
+  if [ "$current" != "$zsh_path" ]; then
+    # chsh refuses shells not listed in /etc/shells on most distros.
+    if [ -f /etc/shells ] && ! grep -qxF "$zsh_path" /etc/shells 2>/dev/null; then
+      echo "$zsh_path" | $SUDO tee -a /etc/shells >/dev/null 2>&1 || true
+    fi
+    if $SUDO chsh -s "$zsh_path" "$USER" >/dev/null 2>&1; then
+      echo "[shell] login shell set to $zsh_path (open a new terminal to pick it up)"
+    else
+      echo "[shell] skipped: run 'chsh -s $zsh_path' manually"
+    fi
+  fi
+fi
+{{ end }}
