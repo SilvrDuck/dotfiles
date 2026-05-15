@@ -35,8 +35,15 @@ Produce four buckets:
 - For each entry: decide whether the **live file** is the new truth (promote) or **source** is (revert).
 
 ### B. Untracked candidates — live config not in chezmoi
-- `chezmoi managed` → set of tracked targets
-- Walk likely dotfile locations on this platform: `~/.config/*`, `~/.zshrc*`, `~/.gitconfig*`, `~/.ssh/config`, `~/Library/Application Support/*` (mac), `~/.local/share/applications/`, etc.
+- `chezmoi managed` → set of tracked targets.
+- Walk dotfile locations on this platform:
+  - `~/.config/*` (XDG configs)
+  - top-level dotfiles in `$HOME` (`~/.zshrc*`, `~/.gitconfig*`, `~/.XCompose`, `~/.profile`, …)
+  - `~/.ssh/config` (never keys)
+  - `~/.local/bin/`, `~/.local/share/applications/`
+  - mac-only: `~/Library/Application Support/*`, `~/Library/Preferences/*`
+  - **non-XDG tool dirs at `$HOME` root** — many tools store config outside `~/.config/`: `~/.claude/` (Claude Code: settings, skills, commands, hooks, agents), `~/.codex/`, `~/.cursor/`, `~/.vscode*/`, etc. Enumerate hidden dirs at `$HOME` root and decide per-dir whether contents are user-authored config vs runtime state (history, sessions, caches).
+- **Partially-managed tool dirs**: when a tool's parent dir has *some* tracked files (e.g. `~/.claude/settings.json` tracked) but unmanaged subdirs alongside (`~/.claude/skills/`, `~/.claude/commands/`, `~/.claude/hooks/`, `~/.claude/agents/`), surface each unmanaged subdir as its own candidate — chezmoi does not auto-track new paths inside a tracked parent. The same pattern applies to `~/.config/nvim/lua/plugins/` (tracked) vs sibling untracked files, etc.
 - Restrict to recently-modified files (mtime within the last ~60 days) to keep the list signal-rich.
 - Subtract anything already managed or already in `.chezmoiignore.tmpl`.
 
