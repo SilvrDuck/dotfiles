@@ -16,9 +16,11 @@ cd "$repo" || exit 0
 data="$(chezmoi data 2>/dev/null || printf '{}')"
 kind=$(printf '%s' "$data" | jq -r '.machine_kind // "unknown"')
 is_mac=$(printf '%s' "$data" | jq -r '.is_mac // false')
+is_linux=$(printf '%s' "$data" | jq -r '.is_linux // false')
 is_omarchy=$(printf '%s' "$data" | jq -r '.is_omarchy_detected // false')
 cm_version=$(chezmoi --version 2>/dev/null | awk '{print $3}' | tr -d ',')
 : "${cm_version:=unknown}"
+gitleaks=$(command -v gitleaks >/dev/null 2>&1 && printf yes || printf 'no (pre-commit hook will fail)')
 
 # Pending source->target diff (anything chezmoi apply would change)
 status_lines=$(chezmoi status 2>/dev/null | grep -c . || true)
@@ -53,8 +55,9 @@ target_state=$([ "$status_lines" -eq 0 ] && printf 'in sync (chezmoi status clea
 wt_state=$([ "$dirty" -eq 0 ] && printf clean || printf '%s modified/untracked' "$dirty")
 
 report=$(cat <<EOF
-machine:     $(hostname) — kind=$kind  mac=$is_mac  omarchy_detected=$is_omarchy
+machine:     $(hostname) — kind=$kind  mac=$is_mac  linux=$is_linux  omarchy_detected=$is_omarchy
 chezmoi:     $cm_version
+gitleaks:    $gitleaks
 source-repo: $repo
 branch:      $branch (ahead $ahead / behind $behind vs origin, last fetch ${fetch_age_h}h ago)
 target:      $target_state
