@@ -7,3 +7,6 @@ Library
 {{ if not .is_linux -}}
 .config/systemd
 {{ end -}}
+{{ if .is_mac -}}
+.config/mimeapps.list
+{{ end -}}
