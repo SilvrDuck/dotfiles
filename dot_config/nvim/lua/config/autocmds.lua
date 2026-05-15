@@ -175,7 +175,12 @@ vim.api.nvim_create_autocmd("VimLeavePre", {
   callback = function()
     if vault_timer then
       vault_timer:stop()
-      vault_fire()
+      -- Detach so libuv doesn't kill the child when nvim exits mid-push.
+      -- We lose the failure-notify path, but vim.notify can't render after
+      -- nvim is gone anyway, so no real visibility lost.
+      if vim.fn.executable(vault_script) == 1 then
+        vim.system({ vault_script }, { detach = true })
+      end
     end
   end,
 })
