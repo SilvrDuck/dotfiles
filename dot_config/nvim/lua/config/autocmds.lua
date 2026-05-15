@@ -17,9 +17,12 @@ vim.fn.mkdir(vim.fn.fnamemodify(spellfile, ":h"), "p")
 -- vim's spell checker and flagged because they're not literal dict entries.
 -- Walk the buffer and accept any compound whose parts all pass the dict; real
 -- typos inside a compound (spel-checker) still fail. Session-only — no writes
--- to the spellfile, refreshes on reopen.
+-- to the spellfile, refreshes on reopen. `syntax sync fromstart` is needed
+-- because :spellgood! updates the internal word list but does not invalidate
+-- already-painted spell highlights on the visible buffer.
 local function accept_hyphenated_compounds()
   local seen = {}
+  local added = false
   for _, line in ipairs(vim.api.nvim_buf_get_lines(0, 0, -1, false)) do
     for compound in line:gmatch("%w+%-[%w%-]+") do
       if not seen[compound] then
@@ -32,10 +35,14 @@ local function accept_hyphenated_compounds()
             break
           end
         end
-        if ok then pcall(vim.cmd, "silent! spellgood! " .. compound) end
+        if ok then
+          pcall(vim.cmd, "silent! spellgood! " .. compound)
+          added = true
+        end
       end
     end
   end
+  if added then vim.cmd("silent! syntax sync fromstart") end
 end
 
 vim.api.nvim_create_autocmd("FileType", {
@@ -46,9 +53,13 @@ vim.api.nvim_create_autocmd("FileType", {
     vim.opt_local.spelllang = { "fr", "en" }
     vim.opt_local.spellfile = spellfile
     accept_hyphenated_compounds()
-    vim.api.nvim_create_autocmd("BufWritePost", {
+    local compound_timer
+    vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
       buffer = args.buf,
-      callback = accept_hyphenated_compounds,
+      callback = function()
+        if compound_timer then compound_timer:stop() end
+        compound_timer = vim.defer_fn(accept_hyphenated_compounds, 500)
+      end,
     })
     -- Fold the YAML frontmatter block. Manual foldmethod (rather than reusing
     -- treesitter's foldexpr) because LazyVim's fold setup didn't pick up the
