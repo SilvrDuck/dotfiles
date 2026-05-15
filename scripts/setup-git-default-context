@@ -74,6 +74,22 @@ EOF2
 mv "$tmp" "$main"
 chmod 600 "$main"
 
+# Switch the chezmoi repo's own origin from HTTPS to SSH so `git push` here
+# uses the key we just generated instead of prompting for HTTPS credentials.
+# `chezmoi init` clones via HTTPS by default; this realigns it post-setup.
+src="$(chezmoi source-path 2>/dev/null || true)"
+if [[ -n "$src" ]] && pushd "$src" >/dev/null 2>&1; then
+  url="$(git remote get-url origin 2>/dev/null || true)"
+  case "$url" in
+    https://github.com/*)
+      new="git@github.com:${url#https://github.com/}"
+      git remote set-url origin "$new"
+      echo "Switched chezmoi origin to SSH: $new"
+      ;;
+  esac
+  popd >/dev/null
+fi
+
 cat <<EOF2
 
 Default Git context created.
