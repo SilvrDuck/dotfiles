@@ -124,7 +124,7 @@ if has mise; then
       /^\[/         { in_tools=0 }
       in_tools && /^[a-zA-Z0-9_.-]+[[:space:]]*=/ { sub(/[[:space:]]*=.*/, ""); print }
     ' "$MISE_CFG")
-    installed=$(mise ls --current 2>/dev/null | awk 'NR>1 {print $1}' | sort -u)
+    installed=$(mise ls --current 2>/dev/null | awk '{print $1}' | sort -u)
     if [ -z "$expected" ]; then
       emit mise '*' n/a "no [tools] entries in mise config"
     else
