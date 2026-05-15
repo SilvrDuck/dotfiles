@@ -26,6 +26,8 @@ After editing source files, proactively offer to run the lifecycle for the user:
 
 Before asking to commit, run `git diff` (and `git diff --staged` if anything is staged) and summarize it in 1–3 lines — files touched + what changed — so the user can approve without opening the diff themselves. `git diff` / `git status` / `git log` are pre-approved in `.claude/settings.json`; commits, pushes, and anything mutating still prompt.
 
+**Do not add `Co-Authored-By: Claude …` (or any Claude attribution trailer) to commits in this repo.** Plain commit messages only.
+
 If the working tree has dirty files or untracked paths you didn't touch, proactively flag them and ask whether to include them in the commit before staging. Don't silently bundle, and don't silently leave them behind — surface the choice.
 
 **Public-internet audit before EVERY commit — mandatory, no exceptions.** This repo is published. Before staging anything, scan the full diff for: PII (name, email, employer, machine hostnames, `/home/<user>` paths, MAC/IP addresses), credentials of any form, internal/private URLs, machine-specific values, and *soft disclosures* — app/service preferences, regional hints, employer hints, anything that profiles the user. List every concrete finding in plain prose and get **explicit per-item approval from the user** before committing — no batched "looks fine?", no implicit consent, no "this seems harmless so I'll include it". Gitleaks catches credential patterns as a backstop; it does NOT catch soft disclosures. Manual review is the primary gate, gitleaks is the second.
