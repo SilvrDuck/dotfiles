@@ -5,11 +5,12 @@
 # With --hook   : JSON envelope for a Claude Code SessionStart hook, so the
 #                 report lands in Claude's starting context automatically.
 #
-# Wired in .claude/settings.json (project scope). Chezmoi-ignored (repo-only).
+# Wired in .claude/settings.json (project scope). Lives under .claude/, which
+# chezmoi does not apply — repo-only.
 
 set -uo pipefail
 
-repo="$(cd "$(dirname "$0")/.." && pwd)"
+repo="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$repo" || exit 0
 
 # --- gather --------------------------------------------------------------

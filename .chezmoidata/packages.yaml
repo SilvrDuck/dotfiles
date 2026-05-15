@@ -102,3 +102,7 @@ packages:
       darwin_kind: cask
       pacman_aur: obsidian
       # No upstream .deb; install_apt will fail-skip on apt-based boxes.
+
+    watch:
+      # Arch ships `watch` as part of procps-ng, not a standalone package.
+      pacman: procps-ng
