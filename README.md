@@ -58,17 +58,42 @@ RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- in
   "postCreateCommand": "chezmoi update --apply || true",
 ```
 
+## Claude
+
+```sh
+# open this repo in Claude Code from anywhere
+myconf
+```
+
+Inside a session at this repo:
+
+```sh
+# reconcile local machine state into the repo, per-item review
+/consolidate
+
+# enumerate what the best-effort install skipped on this machine
+/diagnostic
+```
+
 ## Obsidian
 
 ```sh
 # macOS
+
+# follow sync log
 tail -f ~/Library/Logs/vault-sync.log
+# run sync now
 launchctl kickstart -k gui/$(id -u)/com.silvrduck.vault-sync
+# uninstall the launch agent
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.silvrduck.vault-sync.plist
 
 # Linux
+
+# follow sync log
 journalctl --user -u vault-sync.service -f
+# run sync now
 systemctl --user start vault-sync.service
+# stop and disable the timer
 systemctl --user disable --now vault-sync.timer
 ```
 

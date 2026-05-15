@@ -1,5 +1,6 @@
 ---
-description: Surface local drift, untracked configs, package drift, and stale items in this chezmoi repo with cross-platform impact; propose per-item choices, never batch-decide.
+name: consolidate
+description: Use when the user runs /consolidate or asks to reconcile local machine state with this chezmoi repo. Surfaces four buckets — tracked drift, untracked candidates, package drift, and stale source items — with cross-platform impact, and presents per-item choices the user walks one at a time. Never batch-decides. Includes a mandatory public-internet audit step because this repo is public, and a sanitized memory-write step at the end.
 ---
 
 You are running inside this chezmoi source repo. Goal: surface everything the user did locally on the **current machine** that should propagate to the other kinds (`desktop` / `omarchy` / `devcontainer`, mac and linux), so a `git push` + `chezmoi apply` elsewhere replicates the state. **Never decide for the user** — present a list, recommend, but let them choose every item.
@@ -40,13 +41,14 @@ Produce four buckets:
 - Subtract anything already managed or already in `.chezmoiignore.tmpl`.
 
 ### C. Package drift — installed but not in `.chezmoidata/packages.yaml`
-Detect per active manager only — do not query managers that aren't on this host:
-- pacman (Arch / Omarchy): `pacman -Qeq` (explicit, deps excluded)
-- AUR (yay): `pacman -Qmq` (foreign)
-- Homebrew: `brew leaves` + `brew list --cask`
-- apt: `apt-mark showmanual`
 
-Diff against the yaml's group entries **and** `overrides:` (`pacman_aur`, `darwin_kind`, `apt_manual`). Filter out obvious system / transitive packages — only surface things a human would intentionally install.
+```
+bash "${CLAUDE_SKILL_DIR}/scripts/package-drift.sh"
+```
+
+Emits TSV `manager<TAB>name` for every explicit install on this machine that isn't accounted for by `packages.yaml` (the script reads `.packages.groups` and resolves every per-manager override — `pacman`, `pacman_aur`, `darwin`, `apt` — so the diff respects renames).
+
+Filter out obvious system / transitive packages — only surface things a human would intentionally install. The script only probes managers that are present on the host.
 
 ### D. Stale items — in source but not real anywhere
 - yaml entries with no install on **any** installed manager you can check
