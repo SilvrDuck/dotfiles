@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Summarize current machine + chezmoi repo state.
+#
+# Default mode  : human-readable report on stdout.
+# With --hook   : JSON envelope for a Claude Code SessionStart hook, so the
+#                 report lands in Claude's starting context automatically.
+#
+# Wired in .claude/settings.json (project scope). Chezmoi-ignored (repo-only).
+
+set -uo pipefail
+
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$repo" || exit 0
+
+# --- gather --------------------------------------------------------------
+data="$(chezmoi data 2>/dev/null || printf '{}')"
+kind=$(printf '%s' "$data" | jq -r '.machine_kind // "unknown"')
+is_mac=$(printf '%s' "$data" | jq -r '.is_mac // false')
+is_omarchy=$(printf '%s' "$data" | jq -r '.is_omarchy_detected // false')
+cm_version=$(chezmoi --version 2>/dev/null | awk '{print $3}' | tr -d ',')
+: "${cm_version:=unknown}"
+
+# Pending source->target diff (anything chezmoi apply would change)
+status_lines=$(chezmoi status 2>/dev/null | grep -c . || true)
+
+# Source repo git state — no network, reuses last-known refs
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf unknown)
+ahead=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null || printf 0)
+behind=$(git rev-list --count 'HEAD..@{upstream}' 2>/dev/null || printf 0)
+dirty=$(git status --porcelain 2>/dev/null | grep -c . || true)
+
+fetch_head=$(git rev-parse --git-path FETCH_HEAD 2>/dev/null)
+if [ -n "$fetch_head" ] && [ -f "$fetch_head" ]; then
+  fetch_epoch=$(stat -c %Y "$fetch_head" 2>/dev/null || stat -f %m "$fetch_head" 2>/dev/null || printf 0)
+  fetch_age_h=$(( ( $(date +%s) - fetch_epoch ) / 3600 ))
+else
+  fetch_age_h=99999
+fi
+
+# --- recommend -----------------------------------------------------------
+recs=()
+[ "$status_lines" -gt 0 ] && recs+=("'chezmoi apply' would reconcile $status_lines target path(s)")
+[ "$behind" -gt 0 ]       && recs+=("origin/$branch is ahead by $behind commit(s) — run 'chezmoi update'")
+[ "$ahead" -gt 0 ]        && recs+=("local has $ahead unpushed commit(s) — run 'git push'")
+[ "$dirty" -gt 0 ]        && recs+=("working tree has $dirty modified/untracked path(s)")
+if [ "$fetch_age_h" -gt 24 ] && [ "$behind" -eq 0 ] && [ "$ahead" -eq 0 ] && [ "$dirty" -eq 0 ] && [ "$status_lines" -eq 0 ]; then
+  recs+=("last 'git fetch' was >${fetch_age_h}h ago — fetch first if you want a fresh 'chezmoi update' check")
+fi
+[ ${#recs[@]} -eq 0 ] && recs+=("everything in sync — no action needed")
+
+# --- format --------------------------------------------------------------
+target_state=$([ "$status_lines" -eq 0 ] && printf 'in sync (chezmoi status clean)' || printf '%s path(s) differ from source' "$status_lines")
+wt_state=$([ "$dirty" -eq 0 ] && printf clean || printf '%s modified/untracked' "$dirty")
+
+report=$(cat <<EOF
+machine:     $(hostname) — kind=$kind  mac=$is_mac  omarchy_detected=$is_omarchy
+chezmoi:     $cm_version
+source-repo: $repo
+branch:      $branch (ahead $ahead / behind $behind vs origin, last fetch ${fetch_age_h}h ago)
+target:      $target_state
+worktree:    $wt_state
+
+next steps:
+$(printf '  - %s\n' "${recs[@]}")
+EOF
+)
+
+# --- emit ----------------------------------------------------------------
+if [ "${1:-}" = "--hook" ]; then
+  jq -nc --arg ctx "$report" '{
+    hookSpecificOutput: {
+      hookEventName: "SessionStart",
+      additionalContext: $ctx
+    }
+  }'
+else
+  printf '%s\n' "$report"
+fi

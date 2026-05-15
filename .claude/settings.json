@@ -14,5 +14,19 @@
       "Bash(git push)",
       "Bash(git push *)"
     ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$HOME/.local/share/chezmoi/scripts/machine-context --hook",
+            "timeout": 5,
+            "statusMessage": "Loading machine context"
+          }
+        ]
+      }
+    ]
   }
 }
