@@ -11,7 +11,7 @@ command = /usr/bin/env zsh --login
 {{- end }}
 
 font-family = "JetBrainsMono Nerd Font"
-font-size = 14
+font-size = {{ if .is_mac }}14{{ else }}9{{ end }}
 
 theme = Nord
 
