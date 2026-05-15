@@ -241,7 +241,25 @@ alias du='dust'  # better du
 alias ps='procs'  # better ps
 alias lg='lazygit'  # git UI
 ob() { cd ~/vaults/main && nvim "${@:-.}"; }  # open vault in nvim
-myconf() { cd "$(chezmoi source-path)" && claude "$@"; }  # edit dotfiles with Claude
+myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
+  local src behind drift ans
+  src="$(chezmoi source-path)" || return
+  cd "$src" || return
+  git fetch --quiet 2>/dev/null  # refresh refs so 'behind' is accurate; offline-tolerant
+  behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+  drift=$(chezmoi status 2>/dev/null | grep -c .)
+  if [ "$behind" -gt 0 ] || [ "$drift" -gt 0 ]; then
+    print -P "%F{yellow}chezmoi update pending:%f"
+    [ "$behind" -gt 0 ] && print "  • $behind commit(s) behind origin/$(git rev-parse --abbrev-ref HEAD)"
+    [ "$drift" -gt 0 ] && print "  • $drift path(s) differ from source (chezmoi apply)"
+    read -r "ans?run 'chezmoi update' now? [Y/n] "
+    case "${ans:l}" in
+      n|no) ;;
+      *) chezmoi update ;;
+    esac
+  fi
+  claude "$@"
+}
 
 command -v claude >/dev/null && alias cc='claude'  # short Claude
 
