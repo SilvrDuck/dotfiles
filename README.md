@@ -65,7 +65,7 @@ RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- in
 myconf
 ```
 
-Inside a session at this repo:
+Then:
 
 ```sh
 # reconcile local machine state into the repo, per-item review
@@ -96,4 +96,3 @@ systemctl --user start vault-sync.service
 # stop and disable the timer
 systemctl --user disable --now vault-sync.timer
 ```
-
