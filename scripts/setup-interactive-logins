@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-interactive-logins
+
+Per-machine post-install for tools that need a browser OAuth or
+similar manual step that can't be baked into the chezmoi bootstrap.
+
+Currently handles:
+  Context7 MCP — `npx ctx7 setup` (Claude Code + OpenCode)
+HELP
+  exit 0
+fi
+
+ask_run() {
+  local name="$1"; shift
+  local ans
+  read -r -p "Set up $name? [y/N] " ans
+  [[ "$ans" =~ ^[Yy]([Ee][Ss])?$ ]] || return 0
+  "$@"
+}
+
+setup_context7() {
+  if ! command -v npx >/dev/null 2>&1; then
+    echo "npx not found. Install Node first (e.g. \`mise install node\`)." >&2
+    return 1
+  fi
+  npx ctx7 setup
+}
+
+ask_run "Context7 MCP (Claude Code + OpenCode)" setup_context7
+
+echo "Done."
