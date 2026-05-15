@@ -143,6 +143,24 @@ install_manual_jetbrains_mono_nerd() {
   rm -rf "$tmp"
 }
 
+install_manual_xh() {
+  if command -v xh >/dev/null 2>&1; then return 0; fi
+  echo "[manual] xh"
+  local triple ver
+  case "$(uname -m)" in
+    x86_64)  triple=x86_64-unknown-linux-musl ;;
+    aarch64) triple=aarch64-unknown-linux-musl ;;
+    *) echo "[manual] xh: unsupported arch $(uname -m)"; return 0 ;;
+  esac
+  ver=$(gh_latest_version ducaale/xh)
+  if [ -z "$ver" ]; then
+    echo "[manual] xh: could not resolve latest version"
+    return 0
+  fi
+  install_github_tar xh \
+    "https://github.com/ducaale/xh/releases/download/v${ver}/xh-v${ver}-${triple}.tar.gz"
+}
+
 install_manual_pay_respects() {
   if command -v pay-respects >/dev/null 2>&1; then return 0; fi
   echo "[manual] pay-respects"

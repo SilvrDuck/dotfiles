@@ -85,6 +85,8 @@ elif command -v apt-get >/dev/null 2>&1; then
   install_manual_lazygit
 {{ else if eq $manual "pay_respects_release" }}
   install_manual_pay_respects
+{{ else if eq $manual "xh_release" }}
+  install_manual_xh
 {{ else if eq $manual "jetbrains_mono_nerd" }}
   install_manual_jetbrains_mono_nerd
 {{ else }}

@@ -31,6 +31,9 @@ packages:
       - watch
       - pay-respects
       - mise
+      - cmake
+      - hyperfine
+      - xh
 
     desktop:
       - ghostty
@@ -91,6 +94,9 @@ packages:
 
     lazygit:
       apt_manual: lazygit_release
+
+    xh:
+      apt_manual: xh_release
 
     obsidian:
       darwin_kind: cask
