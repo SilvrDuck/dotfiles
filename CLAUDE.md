@@ -14,7 +14,7 @@ The repo is built to stay lean. When making changes, hold these lines:
 - **No install toggles beyond `machine_kind`.** The kinds (`desktop` / `omarchy` / `devcontainer`) are mostly template context. Resist adding feature flags / optional groups.
 - **Secrets are local-only, unencrypted, per-machine.** They live at `~/.config/dotfiles/secrets/env.d/*.zsh` (chmod 600), populated by `scripts/setup-api-keys`. Do NOT add chezmoi encryption for API keys.
 - **`scripts/` is repo-only, not installed.** It's listed in `.chezmoiignore.tmpl` and run manually from paths in the README. Do not add it to `$PATH` or move it under `dot_*`. Scripts are all interactive and minimal, self-documenting.
-- **LazyVim is fully owned by this repo on every machine kind, Omarchy included.** Omarchy gets to own the terminal/theme layer; nvim is ours.
+- **Omarchy owns its default files; we own the local overrides via chezmoi.** Anything we customize on top of an Omarchy default (hypr, waybar, swayosd, custom themes/extensions/hooks, terminals, etc.) is tracked here. Leave files we don't override alone — `omarchy refresh` / `omarchy update` keep them current. By default these overrides apply on every machine, so other kinds benefit too. Only guard with `{{ if .is_omarchy_detected }}` (or `.chezmoiignore.tmpl`) when a tweak is specifically *needed* for Omarchy — e.g., working around an Omarchy quirk or referencing an Omarchy-only path. There may not be any such cases.
 - **No line of config that only restates the default.** Override only what you're actually changing — every key in an `opts` block must be doing real work. Defaults are the favorite; they survive upgrades, they document themselves, and they keep diffs honest.
 - **Always research online before touching any tool's config.** Fetch the upstream docs (WebFetch / context7) to confirm current option names, defaults, and feel. No going from memory — option schemas drift, and "I think the default is X" leads to redundant or stale config lines. Quote the default you found so the user can sanity-check.
 
@@ -27,6 +27,8 @@ After editing source files, proactively offer to run the lifecycle for the user:
 Before asking to commit, run `git diff` (and `git diff --staged` if anything is staged) and summarize it in 1–3 lines — files touched + what changed — so the user can approve without opening the diff themselves. `git diff` / `git status` / `git log` are pre-approved in `.claude/settings.json`; commits, pushes, and anything mutating still prompt.
 
 If the working tree has dirty files or untracked paths you didn't touch, proactively flag them and ask whether to include them in the commit before staging. Don't silently bundle, and don't silently leave them behind — surface the choice.
+
+**Public-internet audit before EVERY commit — mandatory, no exceptions.** This repo is published. Before staging anything, scan the full diff for: PII (name, email, employer, machine hostnames, `/home/<user>` paths, MAC/IP addresses), credentials of any form, internal/private URLs, machine-specific values, and *soft disclosures* — app/service preferences, regional hints, employer hints, anything that profiles the user. List every concrete finding in plain prose and get **explicit per-item approval from the user** before committing — no batched "looks fine?", no implicit consent, no "this seems harmless so I'll include it". Gitleaks catches credential patterns as a backstop; it does NOT catch soft disclosures. Manual review is the primary gate, gitleaks is the second.
 
 ## Architecture
 
