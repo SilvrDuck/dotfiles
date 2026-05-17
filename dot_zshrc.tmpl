@@ -240,6 +240,15 @@ alias top='btop'  # better top
 alias du='dust'  # better du
 alias ps='procs'  # better ps
 alias lg='lazygit'  # git UI
+
+# Cross-platform clipboard: macOS pbcopy, Wayland wl-copy, X11 xclip fallback
+if command -v pbcopy >/dev/null 2>&1; then
+  alias clip='pbcopy'
+elif [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
+  alias clip='wl-copy'
+elif command -v xclip >/dev/null 2>&1; then
+  alias clip='xclip -selection clipboard'
+fi
 ob() { cd ~/vaults/main && nvim "${@:-.}"; }  # open vault in nvim
 myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
   local src behind drift ans
