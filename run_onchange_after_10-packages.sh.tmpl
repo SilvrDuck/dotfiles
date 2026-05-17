@@ -12,8 +12,10 @@ fi
 
 {{ $allTools := list }}
 {{ range $groupName, $tools := .packages.groups }}
+{{ if or (ne $groupName "desktop") (ne $.machine_kind "devcontainer") }}
 {{ range $tool := $tools }}
 {{ $allTools = append $allTools $tool }}
+{{ end }}
 {{ end }}
 {{ end }}
 

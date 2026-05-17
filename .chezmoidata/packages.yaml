@@ -39,6 +39,9 @@ packages:
       - ghostty
       - font-jetbrains-mono-nerd-font
       - obsidian
+      - docker
+      - docker-compose
+      - lazydocker
 
     nvim:
       - neovim
