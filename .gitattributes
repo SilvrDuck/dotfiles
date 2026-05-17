@@ -1,0 +1,5 @@
+# Append-only logs use git's union merge driver: when two branches both add
+# lines, git keeps all lines from both sides instead of producing a conflict.
+# Editing existing lines on two branches will still conflict (correct, since
+# union merge isn't smart enough to reconcile semantic edits).
+dot_config/vihelp/prefs.jsonl merge=union

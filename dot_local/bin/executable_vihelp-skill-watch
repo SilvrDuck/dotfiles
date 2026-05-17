@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# PostToolUse hook: when an nvim config file is edited from any Claude Code
+# session, inject a reminder to also update the vim-config skill that powers
+# `vihelp`. Without this, the skill silently drifts from reality.
+# Registered in ~/.claude/settings.json.
+
+set -uo pipefail
+
+input=$(cat)
+file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // empty')
+
+case "$file" in
+  */dot_config/nvim/*|*/.config/nvim/*)
+    jq -n --arg f "$file" '{
+      hookSpecificOutput: {
+        hookEventName: "PostToolUse",
+        additionalContext: ("nvim config touched (" + $f + "). The `vihelp` skill at dot_claude/skills/vim-config/SKILL.md mirrors this setup — review the change against the skill and update it in the same commit if it adds, removes, or renames a plugin, keymap, option, or autocmd. Pure refactors with no user-visible change can skip.")
+      }
+    }'
+    ;;
+esac

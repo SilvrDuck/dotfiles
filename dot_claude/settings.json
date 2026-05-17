@@ -11,5 +11,18 @@
   "skipAutoPermissionPrompt": true,
   "permissions": {
     "defaultMode": "auto"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.local/bin/vihelp-skill-watch"
+          }
+        ]
+      }
+    ]
   }
 }

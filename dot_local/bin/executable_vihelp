@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# vihelp — open a Claude Code session preloaded as a vim/neovim cheat-sheet
+# bot for THIS user. Persona is in ~/.config/vihelp/CLAUDE.md; nvim config
+# context is in the `vim-config` skill at ~/.claude/skills/vim-config/.
+# Args are passed as a one-shot prompt; no args drops into interactive mode.
+
+set -euo pipefail
+
+dir="$HOME/.config/vihelp"
+cd "$dir" 2>/dev/null || { echo "vihelp: $dir missing — run \`chezmoi apply\`" >&2; exit 1; }
+
+if ! command -v claude >/dev/null 2>&1; then
+  echo "vihelp: claude CLI not on PATH" >&2
+  exit 1
+fi
+
+if [ $# -gt 0 ]; then
+  exec claude "$*"
+else
+  exec claude
+fi
