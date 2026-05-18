@@ -52,7 +52,11 @@ So `af` / `if` (function), `ac` / `ic` (class), `a]` / `i]` (bracket),
 - `modes.nvim` — mode-tinted cursorline and line numbers (visual signal,
   no chord).
 - `obsidian.nvim` + `render-markdown.nvim` — vault editing.
-- `lualine`, `smear-cursor`, `scroll` — UI cosmetic.
+- `lualine`, `smear-cursor`, `scroll` — UI cosmetic. Lualine sections C
+  (breadcrumb / pretty_path) and X (noice / lazy-updates / git diff) form
+  one contiguous tinted band in a per-project Peacock color, hashed from
+  the cwd repo's root commit SHA — project identity rides on the existing
+  statusline content.
 - `opencode`, `claude-code`, `pi`, `imp`, `image`, `prose` — domain-specific,
   consult the file before recommending.
 
