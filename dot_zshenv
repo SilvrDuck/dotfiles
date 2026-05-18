@@ -1,0 +1,5 @@
+# .zshenv is sourced for ALL zsh invocations (including non-interactive
+# subshells like Claude Code's Bash tool). Keep it minimal — just env vars
+# that need to be present before .zshrc would run.
+
+export _ZO_DOCTOR=0  # zoxide's "init last" rule is a false positive here
