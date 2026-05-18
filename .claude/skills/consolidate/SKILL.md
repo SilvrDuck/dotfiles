@@ -1,6 +1,6 @@
 ---
 name: consolidate
-description: Use when the user runs /consolidate or asks to reconcile local machine state with this chezmoi repo. Surfaces four buckets — tracked drift, untracked candidates, package drift, and stale source items — with cross-platform impact, and presents per-item choices the user walks one at a time. Never batch-decides. Includes a mandatory public-internet audit step because this repo is public, and a sanitized memory-write step at the end.
+description: Use when the user runs /consolidate or asks to reconcile local machine state with this chezmoi repo. Surfaces five buckets — tracked drift, untracked candidates, package drift, Claude settings triage (per-key promote/demote/drop), and stale source items — with cross-platform impact, and presents per-item choices the user walks one at a time. Never batch-decides. Includes a mandatory public-internet audit step because this repo is public, and a sanitized memory-write step at the end.
 ---
 
 You are running inside this chezmoi source repo. Goal: surface everything the user did locally on the **current machine** that should propagate to the other kinds (`desktop` / `omarchy` / `devcontainer`, mac and linux), so a `git push` + `chezmoi apply` elsewhere replicates the state. **Never decide for the user** — present a list, recommend, but let them choose every item.
@@ -27,7 +27,7 @@ Read `.chezmoi.toml.tmpl` (or run `chezmoi data | jq '{machine_kind, is_mac, is_
 
 ## Step 3 — Scan (read-only, batch in parallel where safe)
 
-Produce four buckets:
+Produce five buckets:
 
 ### A. Tracked drift — source vs. live target diverge
 - `chezmoi status` (M/A/D flags)
@@ -57,7 +57,27 @@ Emits TSV `manager<TAB>name` for every explicit install on this machine that isn
 
 Filter out obvious system / transitive packages — only surface things a human would intentionally install. The script only probes managers that are present on the host.
 
-### D. Stale items — in source but not real anywhere
+### D. Claude settings triage — per-key, not per-file
+
+Claude Code mutates `~/.claude/settings.json` autonomously (permission grants, `/config` toggles, plugin enablement). The chezmoi-tracked source at `dot_claude/settings.json.tmpl` must stay **public-safe and intentional**, so this bucket is **per-key**, not per-file. Three live surfaces to compare:
+
+1. `dot_claude/settings.json.tmpl` — tracked source, **public**.
+2. `~/.claude/settings.json` — live, gets overwritten by `chezmoi apply`.
+3. `~/.claude/settings.local.json` — **untracked, machine-local**; Claude merges it at runtime.
+
+For every top-level key (and nested entry inside `enabledPlugins`, `extraKnownMarketplaces`, `permissions.*`, `env`, `hooks`, `mcpServers`, `sandbox`) that appears in the live file but **not** in the tracked source, propose one of:
+
+- **`promote`** — add to `dot_claude/settings.json.tmpl`. Only if **provably public-safe** AND useful on every machine kind. Run the same per-item privacy flag from Step 5.
+- **`demote`** — move into `~/.claude/settings.local.json` (untracked). Default for anything tied to employer, internal hosts, work-only plugin marketplaces, machine-specific paths, or anything you're not sure about. Consult the relevant memory notes for soft-disclosure terms specific to this machine.
+- **`drop`** — let `chezmoi apply` wipe it. Use for autonomous Claude mutations that are noise (one-off permission grants, ephemeral `/config` flips).
+
+For every key already in `~/.claude/settings.local.json`, ask the inverse: is this still correctly local, or has it become public-safe enough to promote? Default answer: **leave it local**. Only promote with explicit user approval.
+
+**Hard rule:** never put employer/soft-disclosure terms in the tracked source — not in keys, not in values, not in plugin names, not in marketplace names, not in comments. If a key's *name* leaks (e.g. a marketplace called after an internal codename), `demote` is the only correct action.
+
+If `~/.claude/settings.local.json` does not yet exist and the user has soft-disclosure terms to guard, point them at `scripts/setup-gitleaks-local` to harden the pre-commit hook.
+
+### E. Stale items — in source but not real anywhere
 - yaml entries with no install on **any** installed manager you can check
 - template branches whose condition is permanently false
 - `.chezmoiignore.tmpl` lines matching nothing
@@ -76,7 +96,7 @@ If research is inconclusive, say so out loud — do not pretend.
 
 ## Step 5 — Present (numbered, grouped, with recommendation)
 
-Render one combined numbered list, grouped A/B/C/D. For each item show:
+Render one combined numbered list, grouped A/B/C/D/E. For each item show:
 
 1. **What** — concrete path / package / yaml line
 2. **Privacy flag** — `clean` / `⚠ <category>` (must call this out item-by-item, not in aggregate)

@@ -7,6 +7,7 @@ REPO_ROOT="$(git -C "{{ .chezmoi.sourceDir }}" rev-parse --show-toplevel 2>/dev/
 HOOK_DIR="$REPO_ROOT/.git/hooks"
 HOOK_FILE="$HOOK_DIR/pre-commit"
 CONFIG_FILE="$REPO_ROOT/.gitleaks.toml"
+LOCAL_CONFIG_FILE="$REPO_ROOT/.gitleaks.local.toml"
 
 [ -d "$HOOK_DIR" ] || exit 0
 
@@ -16,7 +17,14 @@ if ! command -v gitleaks >/dev/null 2>&1; then
   echo "gitleaks is required for commits in this repo."
   exit 1
 fi
-gitleaks git --config "$CONFIG_FILE" --pre-commit --staged --redact --verbose
+# Prefer the gitignored local config (extends the tracked one with
+# machine-only sensitive substrings); fall back to the tracked config.
+if [ -f "$LOCAL_CONFIG_FILE" ]; then
+  CFG="$LOCAL_CONFIG_FILE"
+else
+  CFG="$CONFIG_FILE"
+fi
+gitleaks git --config "\$CFG" --pre-commit --staged --redact --verbose
 EOF2
 
 chmod +x "$HOOK_FILE"
