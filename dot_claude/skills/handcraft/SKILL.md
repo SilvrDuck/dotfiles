@@ -55,36 +55,38 @@ Next: <suggestion to verify>. (r)un it / (n)ext step / notes
 
 ## Entry: pre-flight
 
-On every invocation, check for the state file. State lives **outside** the user's project directory to avoid polluting their tree:
+Run `scripts/executable_preflight.py` and read the JSON it prints. The skill writes no state of its own — re-run the script any later turn you need fresh info. Augment what you know about your own harness (live MCPs, host-specific memory tools) onto the script's output before rendering the banner.
 
-- Claude Code: `~/.claude/projects/<project-slug>/handcraft/state.json` (mirrors where Claude Code already stores per-project state)
-- Other hosts: `${XDG_STATE_HOME:-~/.local/state}/handcraft/<project-hash>/state.json`
+Render the banner from the JSON:
 
-`<project-slug>` follows Claude Code's existing convention (the cwd path with `/` → `-`). `<project-hash>` is a short hash of the absolute cwd. Never write state into the user's project root.
+```
+👋 Handcraft mode active.
 
-For detailed pre-flight banner templates and the full `state.json` schema, see `references/pre-flight.md`.
+Pre-flight checks:
+  ✅ Coding guidelines    → <comma-separated sources>
+  ✅ LSPs                 → <kind (language)>, ...
+  ⚠️  Docs access         → <kind>, ... (or "none detected")
+  ✅ Test runners         → <kind>, ...
+  ✅ Formatters           → <kind>, ...
+```
 
-### Detection is scripted
+If any check is `⚠️` or `❌`, ask one targeted question to resolve before continuing.
 
-Detection is delegated to `scripts/preflight.py` so it stays consistent across sessions and doesn't burn context on tool probing. Two subcommands:
+**Coding guidelines absent or thin:**
+```
+⚠️ No coding guidelines found. Handcraft works best when style preferences are explicit — they get applied silently across every step.
+  (d)raft a starter guidelines file with me / (i)nfer from existing code / (c)ontinue without / notes
+```
 
-- `scripts/preflight.py bootstrap` — full scan; writes the state file and prints the resulting JSON to stdout. Run on first invocation, on `/handcraft --rebootstrap`, or when recheck reports the state is missing/corrupt.
-- `scripts/preflight.py recheck` — loads the cached state, returns drift deltas as JSON. Exit code 0 = all clear, 1 = drift, 2 = missing/corrupt (→ fall back to `bootstrap`).
-
-What the script detects: memory backend (convention files or sidecar fallback), coding guidelines (convention + linter configs with mtimes), LSPs / formatters / test runners (binaries on PATH with scope globs), and a weak host-presence hint. What the script **cannot** detect: live MCP servers and harness-specific memory tools — augment the script's output with what you know about your own harness before rendering the banner.
-
-### Using the output
-
-On first invocation (no state file), run `bootstrap`, then render the banner from the JSON (templates in `references/pre-flight.md`). Treat thin/absent results as `⚠️` and ask the targeted follow-up question for that category.
-
-On subsequent invocations, run `recheck`:
-- Exit 0 → render the one-line cached banner: `👋 Handcraft mode active. (pre-flight cached, all clear)`. If `age_days > 7`, add the soft nudge.
-- Exit 1 → render the drift banner from the `deltas` array and ask `(r)e-scan / (a)pply changes shown / (c)ontinue with cached state / notes`.
-- Exit 2 → run `bootstrap` instead.
+**Docs access absent:**
+```
+⚠️ No docs access. I'll flag every external-library call as unverified until you confirm.
+  (i)nstall context7 MCP / (f)etch via web when needed / (c)ontinue, I'll paste docs / notes
+```
 
 ### When the script doesn't fit
 
-The script's tool list is a best-effort default — it won't cover every language, ecosystem, or exotic setup. If the project is in a language the script doesn't know about, or if the script errors / returns obviously thin results for what you can see in the tree, **tell the user plainly** that the scripted pre-flight didn't cover their stack, and fall back to doing the checks yourself. Read `scripts/executable_preflight.py` to see exactly what it probes (memory backend, guidelines, LSPs, formatters, runners, docs hints) and emulate the same shape by hand for the missing ecosystem, then write the result to the state file in the same JSON schema. Don't ask the user to enumerate their toolchain — figure it out, confirm what's ambiguous, and move on.
+The script's tool list is a best-effort default — it won't cover every language, ecosystem, or exotic setup. If the project is in a language the script doesn't know about, or if the script errors / returns obviously thin results for what you can see in the tree, **tell the user plainly** that the scripted pre-flight didn't cover their stack, and fall back to doing the checks yourself by emulating the same shape (guidelines, LSPs, formatters, runners, docs hints). Don't ask the user to enumerate their toolchain — figure it out, confirm what's ambiguous, and move on.
 
 ---
 
@@ -120,7 +122,7 @@ Non-existential = affects one function's implementation (LRC vs JSON format, sub
 
 If the harness exposes a multi-choice prompt widget (e.g. Claude Code's `AskUserQuestion`), use it for the existential batch. Otherwise ask one at a time as standard hotkey prompts.
 
-Persist the approved surface map to `state.json` under `surface_map`.
+Keep the approved surface map in working context for the session. The skill does not persist it to disk; if the user wants it durable, write it through their memory method (see *Preferences and memory*).
 
 ---
 
@@ -151,11 +153,11 @@ When implementing a function and the spec is silent or ambiguous on something lo
   (<a>) <option a> / (<b>) <option b> / (<c>) <option c> / notes
 ```
 
-When the user picks, log the decision to the active coding-guidelines file as a `💾 Saved to memory:` line and continue. Apply the same decision silently for related future steps.
+When the user picks, save the decision via their memory method (see *Preferences and memory*) with a `💾 Saved to memory: "<rule>"` line, and continue. Apply the same decision silently for related future steps.
 
 ### Deferred gaps
 
-If the user defers (`(d)efer` / *"skip for now"*), append an entry to `state.json.deferred_gaps` (schema in `references/pre-flight.md`). Re-surface the gap when next touching code that depends on the stubbed behavior. Acknowledge: *"Picking up deferred gap: <topic>."*
+If the user defers (`(d)efer` / *"skip for now"*), track the gap in working context for the session and re-surface it when next touching code that depends on the stubbed behavior. Acknowledge: *"Picking up deferred gap: <topic>."* If the session may not survive long enough, offer to write it through the user's memory method.
 
 ### Per-step tooling
 
@@ -211,13 +213,20 @@ Never guess silently at an API.
 
 ## Preferences and memory
 
-When the user corrects style (e.g. "return Pydantic models directly via `-> Model` instead of `response_model=`", "default to async", "always type storage layers"), generalize the correction and surface it:
+Handcraft does not own a memory store. It delegates to whatever the user already uses (host auto-memory, `CLAUDE.md` / `AGENTS.md`, a personal notes system, a project rules file, etc.).
+
+**First time only**, if you can't tell what their method is from context (no obvious convention file, no harness memory tool surfaced), ask once:
+
+```
+How do you like me to remember preferences across sessions?
+  (a)uto-memory in this harness / (c)onvention file in repo (CLAUDE.md / AGENTS.md / …) / (s)kip — don't persist / notes
+```
+
+Record the answer using that same method so you don't ask again. From then on, when the user corrects style (e.g. "return Pydantic models directly via `-> Model`", "default to async", "always type storage layers"), generalize the correction, write it via their chosen method, and surface:
 
 ```
 💾 Saved to memory: "<one-line general rule>"
 ```
-
-Append to the active coding-guidelines file (the first entry in the discovered list, typically `CLAUDE.md`). Never write to a sidecar if a host file exists.
 
 Apply saved prefs silently in all future turns. Do not re-ask.
 
@@ -259,12 +268,6 @@ When the user reports a failure (error, test fail, wrong behavior):
 ```
 
 **Exception:** if the user says *"just fix it"* or equivalent explicit override, fix silently, then back to the loop.
-
----
-
-## State file
-
-Schema and storage paths live in `references/pre-flight.md`. The fallback `prefs.md` (when no host memory backend exists) lives alongside `state.json` in the same out-of-tree location, never in the user's project.
 
 ---
 
