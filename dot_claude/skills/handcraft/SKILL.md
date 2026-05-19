@@ -131,7 +131,11 @@ Persist the approved surface map to `state.json` under `surface_map`.
 A "change" is:
 - One function written or modified, OR
 - One file created with one function in it, OR
-- One small refactor of one symbol.
+- One small refactor of one symbol, OR
+- **One stub** — a signature with `NotImplementedError` / `pass` / `todo!()` to pin a shape before the body exists, OR
+- **One forward reference** — a call to or import of a symbol that doesn't exist yet, used to lock in the caller's shape first.
+
+Stubs and forward references are normal moves, not failures. They put the codebase into a deliberately incomplete state so the user can reason about the *next* decision in a smaller space. When you make one, name it as such in the turn header (`📝 stub:` or `📝 forward-ref:`) so the next turn's LSP output can be read with that context in mind.
 
 A change is **not**:
 - A function plus its tests (do them as separate turns).
@@ -157,9 +161,9 @@ If the user defers (`(d)efer` / *"skip for now"*), append an entry to `state.jso
 
 After writing each diff, run **only** the tools whose `scope` glob matches the touched file(s):
 
-- LSP for the language → must pass or be acknowledged.
+- LSP for the language → must pass, be classified as expected red, or be acknowledged.
 - Formatter → run silently, mention if it changed anything.
-- Imports must resolve. Hallucinated imports never survive past the step.
+- Imports must resolve, *unless* the unresolved import is a forward reference you just introduced on purpose. Hallucinated (unintended) imports never survive past the step.
 
 Tooling output line:
 
@@ -167,12 +171,22 @@ Tooling output line:
 🔎 <tool>: clean. <tool>: <N fixes applied>.
 ```
 
-If any LSP error:
+If any LSP error, read it and judge whether it's expected — i.e. caused by a stub or forward reference that you (or a prior turn) deliberately introduced, and that the user has already seen.
+
+- **Expected red** — acknowledge in one line and continue, naming the symbol(s) so the user can confirm your read:
+
+```
+🔎 <tool>: <N error(s)>, expected (<symbol> not yet implemented). Continuing.
+```
+
+- **Unexpected red** — anything else. Surface it:
 
 ```
 ⚠️ <tool>: <N error(s)> — <one-line summary of first error>.
-  (f)ix the type error / (a)ccept anyway / notes
+  (f)ix it / (k)eep — it's expected / (a)ccept and move on / notes
 ```
+
+`(k)eep` means "you misread this, it's expected red, stop flagging it" — adjust your judgment for the next turn. `(a)ccept` is the old escape hatch — move on without naming why.
 
 **No LSP covers the touched file's language:** soft warn per step, do not block:
 
@@ -260,7 +274,7 @@ These all share a root cause: they steal decisions from the user, which is the w
 
 - **Multiple files per turn (unless mechanically required).** Each file is a decision point the user wants to own; bundling collapses N approvals into one and erases the rhythm.
 - **More than one next step.** Two suggestions means the user picks from your menu instead of choosing what to build. One step keeps them driving.
-- **Anticipating fields, methods, or routes the user hasn't asked for.** Speculative surface area is the most expensive kind to remove later — it looks like work done but it's work to undo.
+- **Adding fields, methods, or routes the user hasn't asked for.** Speculative surface area *you* introduce is the most expensive kind to remove later — it looks like work done but it's work to undo. (Surface area the *user* deliberately scaffolds — a 2-field struct knowing 3 more are coming — is fine; that's them reasoning in the small.)
 - **Paragraph-length explanations.** The code is the artifact, the next question is the handoff. Prose between them dilutes both and slows the loop.
 - **Silently routing around an LSP error.** A type error is a signal the user needs to see; suppressing it trades short-term flow for a latent bug they didn't sign off on.
 - **Re-asking a saved preference.** The user already paid the cost of deciding once; asking again signals you don't trust your own memory and burns their patience.
