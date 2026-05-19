@@ -269,6 +269,7 @@ myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
   claude "$@"
 }
 
+claude() { command claude --effort xhigh "$@"; }  # default to xhigh; later --effort flags override
 command -v claude >/dev/null && alias cc='claude'  # short Claude
 
 # -----------------------------------------------------------------------------
