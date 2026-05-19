@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+#
+# Reconcile ~/.claude/settings.json with the desired settings declared in
+# .chezmoidata/claude-settings.yaml (+ private_plugins / private_marketplaces
+# from ~/.config/chezmoi/chezmoi.toml).
+#
+# Philosophy: settings.json is owned by Claude Code at runtime; we don't try
+# to track the whole file. Instead, we declare a small set of values we want
+# to *force* and idempotently deep-merge them into the live file on every
+# `chezmoi apply`. Keys we don't list are left alone — additive only.
+#
+# Merge rules:
+#   - objects: recursive merge, desired wins on scalar conflict
+#   - arrays:  union + dedupe (so e.g. permissions.allow accumulates)
+#   - scalars: desired wins
+#
+set -euo pipefail
+
+TARGET="${HOME}/.claude/settings.json"
+mkdir -p "$(dirname "$TARGET")"
+
+PUBLIC_DESIRED='{{ .claude_settings | toJson }}'
+PRIVATE_PLUGINS='{{ .private_plugins | default dict | toJson }}'
+PRIVATE_MARKETS_RAW='{{ .private_marketplaces | default dict | toJson }}'
+
+# Wrap private marketplaces ({name: {repo: X}}) into Claude's schema
+# ({name: {source: {source: "github", repo: X}}}).
+PRIVATE_MARKETS=$(printf '%s' "$PRIVATE_MARKETS_RAW" \
+  | jq 'with_entries(.value = {source: {source: "github", repo: .value.repo}})')
+
+# Build the full desired blob: public + private plugins + private markets.
+DESIRED=$(jq -n \
+  --argjson base "$PUBLIC_DESIRED" \
+  --argjson plugins "$PRIVATE_PLUGINS" \
+  --argjson markets "$PRIVATE_MARKETS" \
+  '$base
+   | .enabledPlugins         = ((.enabledPlugins // {}) + $plugins)
+   | .extraKnownMarketplaces = ((.extraKnownMarketplaces // {}) + $markets)')
+
+LIVE='{}'
+if [ -f "$TARGET" ]; then
+  LIVE=$(cat "$TARGET")
+fi
+
+MERGED=$(jq -n --argjson live "$LIVE" --argjson desired "$DESIRED" '
+  def deepmerge(a; b):
+    if (a|type) == "object" and (b|type) == "object" then
+      reduce ((a|keys_unsorted) + (b|keys_unsorted) | unique)[] as $k
+        ({};
+         .[$k] =
+           (if   (a|has($k)) and (b|has($k)) then deepmerge(a[$k]; b[$k])
+            elif (b|has($k))                 then b[$k]
+            else                                  a[$k]
+            end))
+    elif (a|type) == "array" and (b|type) == "array" then
+      (a + b) | unique
+    else
+      b
+    end;
+  deepmerge($live; $desired)
+')
+
+# Skip writing if effectively unchanged.
+if [ "$(printf '%s' "$LIVE" | jq -S -c .)" = "$(printf '%s' "$MERGED" | jq -S -c .)" ]; then
+  exit 0
+fi
+
+TMP="${TARGET}.tmp.$$"
+printf '%s\n' "$MERGED" | jq . > "$TMP"
+mv "$TMP" "$TARGET"
+echo "[claude-settings] reconciled $TARGET"
