@@ -14,7 +14,7 @@ case "$file" in
     jq -n --arg f "$file" '{
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
-        additionalContext: ("nvim config touched (" + $f + "). The `vihelp` skill at dot_claude/skills/vim-config/SKILL.md mirrors this setup — review the change against the skill and update it in the same commit if it adds, removes, or renames a plugin, keymap, option, or autocmd. Pure refactors with no user-visible change can skip.")
+        additionalContext: ("nvim config touched (" + $f + "). The `vihelp` skill at dot_config/vihelp/dot_claude/skills/vim-config/SKILL.md mirrors this setup — review the change against the skill and update it in the same commit if it adds, removes, or renames a plugin, keymap, option, or autocmd. Pure refactors with no user-visible change can skip.")
       }
     }'
     ;;

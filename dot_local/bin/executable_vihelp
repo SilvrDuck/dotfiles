@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # vihelp — open a Claude Code session preloaded as a vim/neovim cheat-sheet
 # bot for THIS user. Persona is in ~/.config/vihelp/CLAUDE.md; nvim config
-# context is in the `vim-config` skill at ~/.claude/skills/vim-config/.
+# context is in the `vim-config` skill at ~/.config/vihelp/.claude/skills/vim-config/.
 # Args are passed as a one-shot prompt; no args drops into interactive mode.
 
 set -euo pipefail
