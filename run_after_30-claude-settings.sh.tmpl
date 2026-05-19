@@ -20,8 +20,8 @@ TARGET="${HOME}/.claude/settings.json"
 mkdir -p "$(dirname "$TARGET")"
 
 PUBLIC_DESIRED='{{ .claude_settings | toJson }}'
-PRIVATE_PLUGINS='{{ .private_plugins | default dict | toJson }}'
-PRIVATE_MARKETS_RAW='{{ .private_marketplaces | default dict | toJson }}'
+PRIVATE_PLUGINS='{{ index . "private_plugins" | default dict | toJson }}'
+PRIVATE_MARKETS_RAW='{{ index . "private_marketplaces" | default dict | toJson }}'
 
 # Wrap private marketplaces ({name: {repo: X}}) into Claude's schema
 # ({name: {source: {source: "github", repo: X}}}).
