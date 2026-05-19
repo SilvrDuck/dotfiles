@@ -4,6 +4,19 @@
   no internal hostnames, no soft-disclosure of tooling tied to work identity.
   Machine-local + work-tagged settings live in ~/.claude/settings.local.json
   (untracked). See CLAUDE.md "public-internet audit" rules and .gitleaks.toml.
+
+  Private plugins / marketplaces (work, client, employer, internal codenames):
+  declare in ~/.config/chezmoi/chezmoi.toml — local, untracked, NEVER in this repo.
+
+      [data.private_marketplaces.<marketplace-name>]
+      repo = "<owner>/<repo>"
+
+      [data.private_plugins]
+      "<plugin>@<marketplace-name>" = true
+
+  The range loops below inline these into the single enabledPlugins /
+  extraKnownMarketplaces blocks, sidestepping Claude Code's shallow-merge of
+  settings.json over settings.local.json for these two keys.
 */ -}}
 {
   "permissions": {
@@ -28,7 +41,8 @@
     "security-guidance@claude-plugins-official": true,
     "claude-code-setup@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true,
-    "telegram@claude-plugins-official": true
+    "telegram@claude-plugins-official": true{{ range $name, $on := (.private_plugins | default dict) }},
+    {{ $name | quote }}: {{ $on }}{{ end }}
   },
   "extraKnownMarketplaces": {
     "claude-plugins-official": {
@@ -36,7 +50,13 @@
         "source": "github",
         "repo": "anthropics/claude-plugins-official"
       }
-    }
+    }{{ range $name, $cfg := (.private_marketplaces | default dict) }},
+    {{ $name | quote }}: {
+      "source": {
+        "source": "github",
+        "repo": {{ $cfg.repo | quote }}
+      }
+    }{{ end }}
   },
   "theme": "dark",
   "skipAutoPermissionPrompt": true,

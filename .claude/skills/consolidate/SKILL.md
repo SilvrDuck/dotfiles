@@ -75,6 +75,16 @@ For every key already in `~/.claude/settings.local.json`, ask the inverse: is th
 
 **Hard rule:** never put employer/soft-disclosure terms in the tracked source — not in keys, not in values, not in plugin names, not in marketplace names, not in comments. If a key's *name* leaks (e.g. a marketplace called after an internal codename), `demote` is the only correct action.
 
+**Plugins & marketplaces — special case (shallow-merge bug).** Claude Code does **not** deep-merge `enabledPlugins` or `extraKnownMarketplaces` between `settings.json` and `settings.local.json` — the tracked file fully replaces the local one for these two keys. So `demote` is **broken** for plugin/marketplace entries: moving them to `settings.local.json` silently disables them. To keep a plugin or marketplace working on this machine while keeping its name out of the public repo, use the **`privatize`** action instead:
+
+1. Append the entry under `[data.private_plugins]` or `[data.private_marketplaces.<name>]` in `~/.config/chezmoi/chezmoi.toml` (local, untracked).
+2. The tracked `dot_claude/settings.json.tmpl` already loops over those keys and renders the entries inline into the single `enabledPlugins` / `extraKnownMarketplaces` block, so the merge problem disappears.
+3. Strip any duplicate from `~/.claude/settings.local.json` once the template owns the entry.
+
+Use `privatize` for any plugin or marketplace whose **name itself** is a soft disclosure (employer marketplace, work-only plugin, internal codename). Use `promote` only when the plugin name is provably generic and useful on every machine kind. Use `drop` for one-off enablement noise.
+
+When scanning for new plugins enabled via the Claude Code UI, diff `~/.claude/plugins/installed_plugins.json` (runtime truth) against the union of `dot_claude/settings.json.tmpl`'s hardcoded list **and** `~/.config/chezmoi/chezmoi.toml`'s `private_plugins` — anything in the first but not the second is a candidate. Same logic for marketplaces vs `known_marketplaces.json`.
+
 If `~/.claude/settings.local.json` does not yet exist and the user has soft-disclosure terms to guard, point them at `scripts/setup-gitleaks-local` to harden the pre-commit hook.
 
 ### E. Stale items — in source but not real anywhere
