@@ -255,7 +255,8 @@ myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
   cd "$src" || return
   git fetch --quiet 2>/dev/null  # refresh refs so 'behind' is accurate; offline-tolerant
   behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
-  drift=$(chezmoi status 2>/dev/null | grep -c .)
+  # Exclude ' R ...' lines: those are run_after_ scripts that run every apply by design, not drift.
+  drift=$(chezmoi status 2>/dev/null | grep -v '^.R' | grep -c .)
   if [ "$behind" -gt 0 ] || [ "$drift" -gt 0 ]; then
     print -P "%F{yellow}chezmoi update pending:%f"
     [ "$behind" -gt 0 ] && print "  • $behind commit(s) behind origin/$(git rev-parse --abbrev-ref HEAD)"

@@ -23,8 +23,9 @@ cm_version=$(chezmoi --version 2>/dev/null | awk '{print $3}' | tr -d ',')
 : "${cm_version:=unknown}"
 gitleaks=$(command -v gitleaks >/dev/null 2>&1 && printf yes || printf 'no (pre-commit hook will fail)')
 
-# Pending source->target diff (anything chezmoi apply would change)
-status_lines=$(chezmoi status 2>/dev/null | grep -c . || true)
+# Pending source->target diff (anything chezmoi apply would change).
+# Exclude ' R ...' lines: those are run_after_ scripts that run every apply by design, not drift.
+status_lines=$(chezmoi status 2>/dev/null | grep -v '^.R' | grep -c . || true)
 
 # Source repo git state — no network, reuses last-known refs
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || printf unknown)
