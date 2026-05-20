@@ -161,6 +161,13 @@ install_manual_xh() {
     "https://github.com/ducaale/xh/releases/download/v${ver}/xh-v${ver}-${triple}.tar.gz"
 }
 
+install_manual_d2() {
+  if command -v d2 >/dev/null 2>&1; then return 0; fi
+  echo "[manual] d2"
+  curl -fsSL https://d2lang.com/install.sh | $SUDO sh -s -- \
+    || echo "[manual] d2: install failed"
+}
+
 install_manual_pay_respects() {
   if command -v pay-respects >/dev/null 2>&1; then return 0; fi
   echo "[manual] pay-respects"

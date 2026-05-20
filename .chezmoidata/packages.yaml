@@ -34,6 +34,8 @@ packages:
       - cmake
       - hyperfine
       - xh
+      - d2
+      - plantuml
 
     desktop:
       - ghostty
@@ -109,3 +111,7 @@ packages:
     watch:
       # Arch ships `watch` as part of procps-ng, not a standalone package.
       pacman: procps-ng
+
+    d2:
+      # No upstream apt package; use the official install script.
+      apt_manual: d2_script
