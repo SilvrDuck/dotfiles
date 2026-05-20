@@ -41,6 +41,7 @@ packages:
       - ghostty
       - font-jetbrains-mono-nerd-font
       - obsidian
+      - kanban-md
       - docker
       - docker-compose
       - lazydocker
@@ -115,3 +116,7 @@ packages:
     d2:
       # No upstream apt package; use the official install script.
       apt_manual: d2_script
+
+    kanban-md:
+      darwin: antopolskiy/tap/kanban-md
+      # No Linux package; install_pacman / install_apt will fail-skip.

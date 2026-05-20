@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# kanban-md version: {{ if lookPath "kanban-md" }}{{ output "kanban-md" "--version" }}{{ else }}not installed{{ end }}
+
+# Installs kanban-md's embedded Claude Code skills (kanban-md,
+# kanban-based-development) into ~/.claude/skills. Re-runs when the
+# kanban-md binary version changes. Skip-quiet if kanban-md isn't on PATH
+# (e.g. devcontainer / Linux without the brew tap).
+
+if ! command -v kanban-md >/dev/null 2>&1; then
+  echo "[kanban-md] skipped: kanban-md not installed"
+  exit 0
+fi
+
+echo "[kanban-md] installing embedded skills (--agent claude --global)"
+kanban-md skill install --agent claude --global --force \
+  || echo "[kanban-md] skill install skipped or failed"
