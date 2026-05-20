@@ -11,6 +11,20 @@ This is a high-stakes mode. The cost of glossing over is real: the user gave you
 
 ---
 
+## Interpreting the invocation
+
+The user may give an explicit hunch ("I don't think X works with Y"), or they may just **mirror back something you wrote** with no commentary:
+
+```
+/doubt token = secrets.token_urlsafe(16)  # 128 bits of entropy
+```
+
+A bare paste like that *is* the doubt. The user is challenging *that specific line* — the value, the comment's claim, the choice it embodies. Treat the pasted content as the disputed claim and investigate it. Don't ask "what about it?" — the act of pasting it back is the question.
+
+If the invocation is genuinely ambiguous (e.g. a multi-line paste with several possible targets, or a line with multiple non-trivial claims), **ask the user before investigating**. Use whatever structured-choice tool is available in this session (e.g. an `AskUserQuestion`-style multi-choice widget); otherwise just list the candidate targets in plain prose and ask which one. Either way, offer 2–4 specific candidates you've identified from the paste — don't guess silently. Guessing wrong wastes the whole investigation; one disambiguating turn is cheap.
+
+---
+
 ## The three verdicts
 
 Every `/doubt` invocation ends with exactly one of these:
