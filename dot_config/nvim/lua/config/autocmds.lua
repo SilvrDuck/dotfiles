@@ -7,6 +7,17 @@
 -- Or remove existing autocmds by their group name (which is prefixed with `lazyvim_` for the defaults)
 -- e.g. vim.api.nvim_del_augroup_by_name("lazyvim_wrap_spell")
 
+-- Mirror yanks (and only yanks) to the system clipboard. `clipboard=""` in
+-- options.lua keeps d/x/c off the OS clipboard so deletes stay scratch-paste
+-- material; this autocmd re-attaches `+` to the y operator alone.
+vim.api.nvim_create_autocmd("TextYankPost", {
+  callback = function()
+    if vim.v.event.operator == "y" then
+      vim.fn.setreg("+", vim.fn.getreg('"'), vim.fn.getregtype('"'))
+    end
+  end,
+})
+
 -- LazyVim sets conceallevel=2 globally; that hides ```fences, *emphasis*, etc.
 -- in markdown. Show everything explicitly (Treesitter highlighting still applies).
 -- Personal spellfile lives inside the vault so `zg` additions sync across machines.

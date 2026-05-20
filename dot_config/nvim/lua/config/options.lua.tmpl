@@ -12,6 +12,11 @@ vim.opt.relativenumber = true -- show relative numbers around cursor
 
 vim.opt.scrolloff = 999 -- typewriter scroll: keep cursor vertically centered
 
+-- LazyVim defaults clipboard to "unnamedplus", which routes d/x/c to the system
+-- clipboard too. Unset it so only yanks reach `+` (via TextYankPost in autocmds.lua);
+-- deletes stay in the unnamed register for in-nvim paste without clobbering OS clipboard.
+vim.opt.clipboard = ""
+
 -- ty is Astral's Rust-based type checker (10-100x faster than pyright). Beta:
 -- expect occasional breakage on upgrades. LazyVim's python extra defaults to
 -- pyright; the extra wires up whatever name is here via nvim-lspconfig + mason.

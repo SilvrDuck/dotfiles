@@ -73,9 +73,16 @@ So `af` / `if` (function), `ac` / `ic` (class), `a]` / `i]` (bracket),
   Implications: `H` / `M` / `L` are nearly useless here; `zz` is redundant
   after most motions.
 - Python LSP = `ty` (Astral's beta type checker, replaces pyright).
+- `clipboard=""` — undoes LazyVim's `unnamedplus`. Yanks reach the system
+  clipboard via a `TextYankPost` autocmd; **deletes/changes do not**. So
+  `yy` → OS clipboard, but `dd` / `x` / `cw` stay nvim-only. To put a
+  delete on the OS clipboard, prefix `"+` (`"+dd`, `"+x`). `"0p` still
+  pastes the last yank specifically.
 
 ## Custom autocmds (markdown-focused, mostly invisible)
 
+- `TextYankPost` copies the unnamed register into `+` when the operator is
+  `y`, so only yanks (not deletes) reach the system clipboard.
 - `conceallevel=0` in markdown (so `*emphasis*` and code fences stay literal).
 - Spell on for markdown, langs `fr` + `en`, spellfile in `~/vaults/main/.spell/`.
 - Hyphenated compounds (`first-save`, `Status-bar`) auto-accepted if all
