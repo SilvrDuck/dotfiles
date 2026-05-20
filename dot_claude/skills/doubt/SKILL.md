@@ -23,31 +23,61 @@ Do not return a fourth verdict ("it depends", "you could try…", "let me know w
 
 ---
 
-## Mandatory investigation (always all three)
+## Classify the doubt first
 
-Before drafting a verdict you must do **all three** of these. Skipping any of them defeats the point — the user invoked `/doubt` precisely because shallow confidence is what got you here.
+Not every doubt is about library behavior. Before investigating, name what kind of claim is in question — the kind picks which sources are relevant. A doubt on a comment, a team practice, or a domain fact pulls from different places than a doubt on `asyncio.gather`.
 
-### 1. Inspect the actual code
+| Kind | Example doubt | Where the answer lives |
+|---|---|---|
+| **Code / API** | "I don't think `asyncio.gather` returns in order." | Library docs, type system, runtime, language spec. |
+| **Project fact** | "That comment says the queue is FIFO — is it?" | This repo: code, tests, ADRs, README, changelog, `git log`/`git blame`. |
+| **Org / team practice** | "We don't deploy on Fridays, do we?" | Org/team `CLAUDE.md` / `AGENTS.md`, contributing guide, handbook, runbooks. |
+| **Domain / external fact** | "GDPR doesn't actually require X." | Primary source (law text, RFC, standard), reputable dated secondary. |
+| **Reasoning / claim** | "Your conclusion doesn't follow from those premises." | The argument itself — re-derive, look for counter-examples. |
 
-- Re-read the file(s) involved in the disputed claim. Don't rely on memory of what you wrote a few turns ago.
-- Use whatever code-introspection is available: LSP (hover, go-to-definition, find-references), AST tools, `grep`, type checker output. Mentally running the code is not enough — verify with a tool.
-- If the doubt is about runtime behavior, **run it**: a focused script, a REPL snippet, or the existing test suite scoped to the relevant case.
+Lead the Investigation block with `Kind: <name>` so the user can immediately tell whether you classified the doubt correctly. If the kind is wrong, the rest of the investigation is wasted — better to be told now.
 
-### 2. Fetch authoritative docs
+---
 
-- Pull current docs for any library, framework, SDK, or CLI involved. Use whatever doc-fetching tool is available in this session — a docs MCP (e.g. context7), `WebFetch` against the official docs site, or a direct read of vendored docs in the repo. Don't rely on training-data recall: your knowledge drifts, and the user's hunch may be tracking a recent API change.
-- For language-level questions (Python stdlib, TS types, etc.), prefer the official docs / PEPs / TC39 proposals over blog posts.
-- Quote the relevant snippet inline so the user can verify without leaving the chat.
-- If no doc-fetching tool is available, say so explicitly in the Investigation block — don't silently substitute memory.
+## Mandatory investigation (three axes, always all three)
 
-### 3. Web search for adversarial signal
+Three axes — **Ground**, **Source**, **Adversary**. Always all three. The *kind* changes *what* fills each axis, not whether you do it.
 
-- Search for the *opposite* of what you originally claimed. ("X does not work with Y", "X deprecated in Y", "X gotcha with Y".)
-- Use whatever web tool is available (`WebSearch`, `WebFetch`, a search MCP). Check GitHub issues, changelogs, and Stack Overflow — these surface footguns docs hide.
-- One good adversarial query beats five confirmatory ones.
-- If no web tool is available, note it and lean harder on docs + code.
+### 1. Ground — anchor in observable reality
 
-If a step is genuinely impossible (no library involved, no code to inspect, no tool available), say so explicitly in the verdict — don't silently skip it.
+The thing closest to truth in the user's world. Re-examine it with a tool, not memory.
+
+- **Code/API**: re-read the file(s); use LSP (hover, go-to-definition, find-references), AST, `grep`, type checker. If it's about runtime behavior, **run it** — focused script, REPL, scoped test.
+- **Project fact**: read the code the comment claims to describe; check tests; `git log -p` / `git blame` the line; look at the commit that introduced it.
+- **Org / team practice**: read the team's `CLAUDE.md` / `AGENTS.md`, contributing guide, repo `docs/`, ADRs.
+- **Domain / external fact**: locate the primary artifact (the law section, the RFC clause, the spec paragraph).
+- **Reasoning**: write the argument out as premises → conclusion. Try to break it with a concrete counter-example.
+
+### 2. Source — fetch the authoritative reference
+
+External-to-the-immediate-thing corroboration. Pick the tool that fits the kind:
+
+- **Code/API**: current docs via whatever doc-fetching tool is available (docs MCP like context7, `WebFetch` against the official site, vendored docs). Prefer official over blog posts.
+- **Project fact**: ADRs, design docs, the original PR description / discussion, changelog entries.
+- **Org / team practice**: org-level `CLAUDE.md`, handbook, runbook, team wiki, recent retros.
+- **Domain / external fact**: the primary source again if not already used in Ground, plus a recent, well-cited secondary.
+- **Reasoning**: established prior art — named fallacies, design patterns, papers that already settled this.
+
+Quote the relevant snippet inline so the user can verify without leaving the chat. If no fitting source-tool is available, say so explicitly — don't silently substitute memory.
+
+### 3. Adversary — actively try to falsify
+
+Search for the *opposite* of what was claimed. This is the axis that catches confirmation bias.
+
+- **Code/API**: "X does not work with Y", "X deprecated in Y", "X gotcha with Y". Check GitHub issues, changelogs, Stack Overflow.
+- **Project fact**: look for commits, tests, or code that *contradict* the claim. `git log -S "<keyword>"` for when behavior changed.
+- **Org / team practice**: look for exceptions, retros, threads where the practice was discussed or amended.
+- **Domain / external fact**: search for criticism, errata, jurisdictional carve-outs, "myth of X".
+- **Reasoning**: steel-man the opposite conclusion. What would have to be true for the *other* answer to be right?
+
+One good adversarial query beats five confirmatory ones. If no web/search tool is available, note it and lean harder on Ground + Source.
+
+If an axis is genuinely impossible for this kind (e.g. no external source exists for a private project fact), say so explicitly in the verdict — don't silently skip it.
 
 ---
 
@@ -67,11 +97,12 @@ Unsourced assertions are exactly the failure mode `/doubt` exists to catch. If y
 
 ```
 🔬 Doubt: <one-line restatement of what the user is questioning>
+Kind: <Code/API | Project fact | Org/team practice | Domain/external | Reasoning>
 
 Investigation
-- Code:  <what you read / ran, with file:line refs>
-- Docs:  <source + key quote, or N/A with reason>
-- Web:   <adversarial query + key finding, or N/A with reason>
+- Ground:     <what you re-examined directly, with refs (file:line, commit, doc section)>
+- Source:     <authoritative reference + key quote, or N/A with reason>
+- Adversary:  <falsification attempt + key finding, or N/A with reason>
 
 Verdict: <Correct way | Pushback | Tradeoffs>
 
