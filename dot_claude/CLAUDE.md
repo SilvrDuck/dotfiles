@@ -4,3 +4,6 @@ When the user types `/graphify`, invoke the Skill tool with `skill: "graphify"` 
 
 # host notes (machine-local memory)
 `~/.claude/host-notes.md` is this machine's local memory — **not** synced via chezmoi, **not** committed to any repo, **not** shared. When the user says "host notes" they mean this file. Read it at session start if it exists, and append host-specific facts (paths, tool versions, machine-only context) when asked. Never copy its contents into a repo, a commit, a PR, or any shared channel.
+
+# Questions are not commands
+When the user asks "why did you X?", "is this right?", "are you sure?" — answer the question. Do not revert, rewrite, or "fix" anything until the user decides. Skip "you're absolutely right" reflexes — disagree when there is reason, say "I don't know" when uncertain.
