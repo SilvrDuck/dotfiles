@@ -274,6 +274,25 @@ claude() { command claude --effort xhigh "$@"; }  # default to xhigh; later --ef
 command -v claude >/dev/null && alias cc='claude'  # short Claude
 
 # -----------------------------------------------------------------------------
+# Chezmoi auto-update — async, ~twice a day, never blocks shell start
+# Interval-based (every 12h since last run), not wall-clock — first qualifying
+# shell after the window wins; concurrent shells skip via the stamp touch.
+# -----------------------------------------------------------------------------
+
+{{ if ne .machine_kind "devcontainer" -}}
+if command -v chezmoi >/dev/null; then  # chezmoi available
+  () {
+    local stamp="$HOME/.cache/chezmoi-update.stamp"  # last-run marker
+    local -a stale=( $stamp(Nmh+12) )  # non-empty if mtime > 12h
+    [[ -e $stamp && ${#stale} -eq 0 ]] && return  # fresh enough, skip
+    mkdir -p ${stamp:h}  # ensure cache dir
+    touch $stamp  # claim slot first so concurrent shells don't re-fire
+    (chezmoi update >"$HOME/.cache/chezmoi-update.log" 2>&1 &)  # subshell exit detaches the child
+  }
+fi
+{{- end }}
+
+# -----------------------------------------------------------------------------
 # Local overrides
 # -----------------------------------------------------------------------------
 
