@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+"""Enforce trailing-comment style for this repo.
+
+Rule: a trailing comment must start at a fixed column, and the comment
+text (after "# ") must not exceed a max length. Lines whose code
+overflows the column carry no trailing comment; explanations that
+exceed the max belong in a full-left "# ..." block above the code.
+
+The column and max are set by the COL and MAX constants below.
+
+Usage:
+    tools/lint-comments FILE [FILE ...]   lint files (exit 1 on violation)
+    tools/lint-comments --hook            Claude Code PostToolUse mode:
+                                          reads JSON on stdin and lints
+                                          the file_path it names
+"""
+
+import json
+import sys
+from pathlib import Path
+
+COL = 60
+MAX = 30
+
+LINTED_EXTS = {".tmpl", ".sh", ".zsh", ".conf", ".yaml", ".yml", ".toml", ".lua"}
+
+
+def find_trailing_hash(line: str) -> int | None:
+    in_single = in_double = False
+    for i, c in enumerate(line):
+        if c == "'" and not in_double:
+            in_single = not in_single
+        elif c == '"' and not in_single:
+            in_double = not in_double
+        elif c == "#" and not in_single and not in_double:
+            if i >= 2 and line[i - 2 : i] == "  " and line[: i - 2].strip():
+                return i + 1
+    return None
+
+
+def lint_file(path: Path) -> bool:
+    if path.suffix not in LINTED_EXTS:
+        return True
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return True
+    ok = True
+    for n, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        pos = find_trailing_hash(line)
+        if pos is None:
+            continue
+        if pos != COL:
+            print(f"{path}:{n}: # at col {pos} (want {COL})")
+            ok = False
+        after = line[pos:]
+        if after.startswith(" "):
+            after = after[1:]
+        if len(after) > MAX:
+            print(f"{path}:{n}: comment {len(after)} chars (max {MAX}): {after}")
+            ok = False
+    return ok
+
+
+def main() -> int:
+    args = sys.argv[1:]
+    if args and args[0] == "--hook":
+        try:
+            data = json.load(sys.stdin)
+        except json.JSONDecodeError:
+            return 0
+        path_str = data.get("tool_input", {}).get("file_path", "")
+        return 0 if not path_str or lint_file(Path(path_str)) else 1
+    if not args:
+        sys.stderr.write("usage: lint-comments FILE [FILE ...] | --hook\n")
+        return 2
+    rc = 0
+    for a in args:
+        if not lint_file(Path(a)):
+            rc = 1
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main())

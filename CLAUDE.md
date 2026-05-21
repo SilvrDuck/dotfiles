@@ -13,7 +13,9 @@ The repo is built to stay lean. When making changes, hold these lines:
 - **Best-effort install.** Package install failures `echo skipped` and continue — never `set -e` away from that. The AI CLI installers (`claude`, `opencode`, `pi`) intentionally `curl | bash` from upstream; this is called out in the script and is deliberate.
 - **No install toggles beyond `machine_kind`.** The kinds (`desktop` / `omarchy` / `devcontainer`) are mostly template context. Resist adding feature flags / optional groups.
 - **Secrets are local-only, unencrypted, per-machine.** They live at `~/.config/dotfiles/secrets/env.d/*.zsh` (chmod 600), populated by `scripts/setup-api-keys`. Do NOT add chezmoi encryption for API keys.
-- **`scripts/` is repo-only, not installed.** It's listed in `.chezmoiignore.tmpl` and run manually from paths in the README. Do not add it to `$PATH` or move it under `dot_*`. Scripts are all interactive and minimal, self-documenting.
+- **`scripts/` is for user-facing post-install setup.** Interactive, minimal, self-documenting helpers a human runs from paths in the README. Repo-only, listed in `.chezmoiignore.tmpl`. Don't add it to `$PATH` or move under `dot_*`.
+- **`tools/` is for repo-internal tooling** (linters, hook wrappers). Invoked from Claude hooks, the git pre-commit hook, or by contributors directly. Repo-only, also ignored at apply-time. Not user-facing.
+- **Trailing-comment style** in `.tmpl` / `.sh` / `.zsh` / `.conf` / `.yaml` / `.toml` / `.lua`: trailing `#` comments sit at a fixed column with a max comment length (both set in `tools/lint-comments`). Lines whose code overflows that column carry no trailing comment; longer or multi-line explanations go in a full-left `# ...` block above the code. Enforced via a Claude PostToolUse hook and the git pre-commit hook.
 - **Omarchy owns its default files; we own the local overrides via chezmoi.** Anything we customize on top of an Omarchy default (hypr, waybar, swayosd, custom themes/extensions/hooks, terminals, etc.) is tracked here. Leave files we don't override alone — `omarchy refresh` / `omarchy update` keep them current. By default these overrides apply on every machine, so other kinds benefit too. Only guard with `{{ if .is_omarchy_detected }}` (or `.chezmoiignore.tmpl`) when a tweak is specifically *needed* for Omarchy — e.g., working around an Omarchy quirk or referencing an Omarchy-only path. There may not be any such cases.
 - **No line of config that only restates the default.** Override only what you're actually changing — every key in an `opts` block must be doing real work. Defaults are the favorite; they survive upgrades, they document themselves, and they keep diffs honest.
 - **Always research online before touching any tool's config.** Fetch the upstream docs (WebFetch / context7) to confirm current option names, defaults, and feel. No going from memory — option schemas drift, and "I think the default is X" leads to redundant or stale config lines. Quote the default you found so the user can sanity-check.
@@ -39,7 +41,7 @@ Bootstrap chain (numeric prefix = order):
 1. `run_once_before_00-prereqs.sh.tmpl` — installs Homebrew on macOS or ensures git/curl/build-essential on Linux. Detects pacman vs apt.
 2. `run_onchange_after_10-packages.sh.tmpl` — iterates `.chezmoidata/packages.yaml` groups (`core`, `shell`, `cli`, `desktop`, `nvim`) and installs via brew / pacman / yay (AUR) / apt. The per-tool `overrides:` map handles cross-manager name/kind differences (`darwin_kind: cask`, `pacman_aur: …`, `apt_manual: antidote_git`). The same script then installs `claude`, `opencode`, `pi` from upstream — intentional.
 3. `run_onchange_after_15-mise-install.sh.tmpl` — runs `mise install` whenever `dot_config/mise/config.toml` changes.
-4. `run_onchange_after_20-gitleaks-hook.sh.tmpl` — writes a `pre-commit` hook into THIS repo's `.git/hooks/` that runs `gitleaks` with `.gitleaks.toml`. Commits here require `gitleaks` on PATH.
+4. `run_onchange_after_20-gitleaks-hook.sh.tmpl` — writes a `pre-commit` hook into THIS repo's `.git/hooks/` that runs `gitleaks` (secrets) with `.gitleaks.toml` and then `tools/lint-comments` (trailing-comment style) on staged files. Commits here require `gitleaks` on PATH.
 
 Templates branch on `.machine_kind` and `.is_mac` / `.is_linux` / `.is_omarchy_detected`, all set by `.chezmoi.toml.tmpl`.
 
@@ -48,6 +50,9 @@ Templates branch on `.machine_kind` and `.is_mac` / `.is_linux` / `.is_omarchy_d
 - `setup-git-additional-context` — work/client identity: `includeIf` for a folder + dedicated SSH key + `Host github.com-<ctx>` aliases + `url.…insteadOf` rewrites for known org prefixes.
 - `setup-api-keys` — writes `~/.config/dotfiles/secrets/env.d/*.zsh` (sourced from `dot_zshrc.tmpl`).
 - `setup-keyboard-layout` — keyboard config.
+
+`tools/` (repo-internal, called from hooks or by contributors):
+- `lint-comments` — enforces trailing-comment style. Accepts file paths as args, or `--hook` to read a Claude Code PostToolUse JSON payload from stdin. Wired into `.claude/settings.json` (PostToolUse on Edit/Write/MultiEdit) and the git pre-commit hook.
 
 ## Shell stack (touch with care — load order is the bug source)
 

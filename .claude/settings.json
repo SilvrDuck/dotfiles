@@ -35,6 +35,10 @@
           {
             "type": "command",
             "command": "~/.local/bin/vihelp-skill-watch"
+          },
+          {
+            "type": "command",
+            "command": "$HOME/.local/share/chezmoi/tools/lint-comments --hook"
           }
         ]
       }

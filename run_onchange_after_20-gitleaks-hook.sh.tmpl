@@ -8,9 +8,12 @@ HOOK_DIR="$REPO_ROOT/.git/hooks"
 HOOK_FILE="$HOOK_DIR/pre-commit"
 CONFIG_FILE="$REPO_ROOT/.gitleaks.toml"
 LOCAL_CONFIG_FILE="$REPO_ROOT/.gitleaks.local.toml"
+LINTER="$REPO_ROOT/tools/lint-comments"
 
 [ -d "$HOOK_DIR" ] || exit 0
 
+# Pre-commit hook: gitleaks for secrets, then the trailing-comment-style
+# lint on staged files. Both must pass for the commit to proceed.
 cat > "$HOOK_FILE" <<EOF2
 #!/bin/sh
 if ! command -v gitleaks >/dev/null 2>&1; then
@@ -24,7 +27,14 @@ if [ -f "$LOCAL_CONFIG_FILE" ]; then
 else
   CFG="$CONFIG_FILE"
 fi
-gitleaks git --config "\$CFG" --pre-commit --staged --redact --verbose
+gitleaks git --config "\$CFG" --pre-commit --staged --redact --verbose || exit 1
+
+if [ -x "$LINTER" ]; then
+  git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r f; do
+    [ -f "\$f" ] || continue
+    "$LINTER" "\$f" || exit 1
+  done
+fi
 EOF2
 
 chmod +x "$HOOK_FILE"

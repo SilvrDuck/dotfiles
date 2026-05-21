@@ -2,18 +2,18 @@
 # Editor
 # -----------------------------------------------------------------------------
 
-export EDITOR=nvim  # default CLI editor
-export VISUAL=nvim  # visual editor
+export EDITOR=nvim                                         # default CLI editor
+export VISUAL=nvim                                         # visual editor
 
 {{ if .is_mac -}}
 # -----------------------------------------------------------------------------
 # Homebrew
 # -----------------------------------------------------------------------------
 
-if [ -x /opt/homebrew/bin/brew ]; then  # Apple Silicon path
-  eval "$(/opt/homebrew/bin/brew shellenv)"  # expose brew
-elif [ -x /usr/local/bin/brew ]; then  # Intel path
-  eval "$(/usr/local/bin/brew shellenv)"  # expose brew
+if [ -x /opt/homebrew/bin/brew ]; then                     # Apple Silicon path
+  eval "$(/opt/homebrew/bin/brew shellenv)"                # expose brew
+elif [ -x /usr/local/bin/brew ]; then                      # Intel path
+  eval "$(/usr/local/bin/brew shellenv)"                   # expose brew
 fi
 {{- end }}
 
@@ -21,29 +21,30 @@ fi
 # PATH
 # -----------------------------------------------------------------------------
 
-export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"  # user bins first
+export PATH="$HOME/.local/bin:$HOME/.opencode/bin:$PATH"   # user bins first
 
 # -----------------------------------------------------------------------------
 # History
 # -----------------------------------------------------------------------------
 
-HISTSIZE=100000  # memory history
-SAVEHIST=100000  # saved history
-HISTFILE="$HOME/.zsh_history"  # history file
+HISTSIZE=100000                                            # memory history
+SAVEHIST=100000                                            # saved history
+HISTFILE="$HOME/.zsh_history"                              # history file
 
-setopt SHARE_HISTORY  # sync shells
-setopt HIST_IGNORE_DUPS  # skip dupes
-setopt HIST_IGNORE_SPACE  # hide leading-space cmds
-setopt INTERACTIVE_COMMENTS  # allow comments
+setopt SHARE_HISTORY                                       # sync shells
+setopt HIST_IGNORE_DUPS                                    # skip dupes
+setopt HIST_IGNORE_SPACE                                   # hide leading-space cmds
+setopt INTERACTIVE_COMMENTS                                # allow comments
 
 # -----------------------------------------------------------------------------
 # Completion styles
 # -----------------------------------------------------------------------------
 
-zstyle ':completion:*' menu no  # let fzf-tab own menu
+zstyle ':completion:*' menu no                             # let fzf-tab own menu
 zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # case-insensitive
-zstyle ':completion:*:-command-:*' tag-order 'commands functions builtins reserved-words aliases'  # no env vars in command position
-zstyle ':fzf-tab:*' fzf-flags --height=40% --reverse --border  # compact UI
+# Drop env vars from command-position completion.
+zstyle ':completion:*:-command-:*' tag-order 'commands functions builtins reserved-words aliases'
+zstyle ':fzf-tab:*' fzf-flags --height=40% --reverse --border
 
 # -----------------------------------------------------------------------------
 # Antidote phase 1
@@ -51,46 +52,47 @@ zstyle ':fzf-tab:*' fzf-flags --height=40% --reverse --border  # compact UI
 # -----------------------------------------------------------------------------
 
 {{ if .is_mac -}}
-ANTIDOTE_ZSH="$(brew --prefix 2>/dev/null)/opt/antidote/share/antidote/antidote.zsh"  # brew antidote
+ANTIDOTE_ZSH="$(brew --prefix 2>/dev/null)/opt/antidote/share/antidote/antidote.zsh"
 
-if [ -r "$ANTIDOTE_ZSH" ]; then  # antidote installed
-  source "$ANTIDOTE_ZSH"  # load antidote
+if [ -r "$ANTIDOTE_ZSH" ]; then                            # antidote installed
+  source "$ANTIDOTE_ZSH"                                   # load antidote
 fi
 {{ else -}}
-if [ -r /usr/share/zsh-antidote/antidote.zsh ]; then  # distro antidote
-  source /usr/share/zsh-antidote/antidote.zsh  # load antidote
-elif [ -r "$HOME/.local/share/antidote/antidote.zsh" ]; then  # manual antidote
-  source "$HOME/.local/share/antidote/antidote.zsh"  # load antidote
+if [ -r /usr/share/zsh-antidote/antidote.zsh ]; then       # distro antidote
+  source /usr/share/zsh-antidote/antidote.zsh              # load antidote
+elif [ -r "$HOME/.local/share/antidote/antidote.zsh" ]; then
+  source "$HOME/.local/share/antidote/antidote.zsh"        # load antidote
 fi
 {{- end }}
 
-if command -v antidote >/dev/null; then  # antidote loaded
-  antidote load ${ZDOTDIR:-$HOME}/.zsh_plugins_fpath.txt  # fpath before compinit
+if command -v antidote >/dev/null; then                    # antidote loaded
+  antidote load ${ZDOTDIR:-$HOME}/.zsh_plugins_fpath.txt   # fpath before compinit
 fi
 
 # -----------------------------------------------------------------------------
 # Completion engine
 # -----------------------------------------------------------------------------
 
-autoload -Uz compinit  # load completion init
+autoload -Uz compinit                                      # load completion init
 if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qNmh+24) ]]; then
-  compinit  # full audit + dump regen once a day
+  # Full audit + dump regen once a day.
+  compinit
 else
-  compinit -C  # skip audit when dump is fresh
+  compinit -C                                              # skip audit when dump is fresh
 fi
 
 # -----------------------------------------------------------------------------
 # Carapace
 # -----------------------------------------------------------------------------
 
-if command -v carapace >/dev/null; then  # rich completions available
-  export CARAPACE_BRIDGES='zsh,fish,bash'  # completion bridges
-  cache="${ZDOTDIR:-$HOME}/.cache/carapace.zsh"  # init cache
+if command -v carapace >/dev/null; then                    # rich completions
+  export CARAPACE_BRIDGES='zsh,fish,bash'                  # completion bridges
+  cache="${ZDOTDIR:-$HOME}/.cache/carapace.zsh"            # init cache
   if [[ ! -s $cache || $(command -v carapace) -nt $cache ]]; then
-    mkdir -p ${cache:h}  # ensure cache dir
-    carapace _carapace > $cache  # regen on binary change
+    mkdir -p ${cache:h}                                    # ensure cache dir
+    carapace _carapace > $cache                            # regen on binary change
   fi
-  source $cache  # load cached init
+  source $cache                                            # load cached init
   unset cache
 fi
 
@@ -99,69 +101,70 @@ fi
 # Load widget plugins after compinit.
 # -----------------------------------------------------------------------------
 
-if command -v antidote >/dev/null; then  # antidote loaded
-  antidote load ${ZDOTDIR:-$HOME}/.zsh_plugins_after_compinit.txt  # widgets after compinit
+if command -v antidote >/dev/null; then                    # antidote loaded
+  antidote load ${ZDOTDIR:-$HOME}/.zsh_plugins_after_compinit.txt
 fi
 
 # -----------------------------------------------------------------------------
 # Vi mode
 # -----------------------------------------------------------------------------
 
-bindkey -v  # native vi mode
-KEYTIMEOUT=20  # faster key sequences
+bindkey -v                                                 # native vi mode
+KEYTIMEOUT=20                                              # faster key sequences
 
-bindkey -M viins 'jk' vi-cmd-mode  # jk escapes insert
-bindkey -M viins 'kj' vi-cmd-mode  # kj escapes insert
-bindkey -M viins 'ç' fzf-cd-widget  # Alt+C eurkey override
-bindkey -M vicmd 'ç' fzf-cd-widget  # Alt+C eurkey override
-bindkey -M viins '^?' backward-delete-char  # backspace crosses lines
-bindkey -M viins '^H' backward-delete-char  # ditto (some terminals)
-bindkey -M viins '^W' backward-kill-word    # ctrl-w crosses lines
+bindkey -M viins 'jk' vi-cmd-mode                          # jk escapes insert
+bindkey -M viins 'kj' vi-cmd-mode                          # kj escapes insert
+bindkey -M viins 'ç' fzf-cd-widget                         # Alt+C eurkey override
+bindkey -M vicmd 'ç' fzf-cd-widget                         # Alt+C eurkey override
+bindkey -M viins '^?' backward-delete-char                 # backspace crosses lines
+bindkey -M viins '^H' backward-delete-char                 # ditto (some terminals)
+bindkey -M viins '^W' backward-kill-word                   # ctrl-w crosses lines
 
 function zle-keymap-select zle-line-init {
   case $KEYMAP in
-    vicmd) printf '\e[2 q' ;;  # block cursor
-    viins|main) printf '\e[6 q' ;;  # beam cursor
+    vicmd) printf '\e[2 q' ;;                              # block cursor
+    viins|main) printf '\e[6 q' ;;                         # beam cursor
   esac
 }
 
-zle -N zle-keymap-select  # cursor on mode switch
-zle -N zle-line-init  # cursor on prompt start
+zle -N zle-keymap-select                                   # cursor on mode switch
+zle -N zle-line-init                                       # cursor on prompt start
 
 function zle-line-finish {
-  printf '\e[6 q'  # reset cursor
+  printf '\e[6 q'                                          # reset cursor
 }
 
-zle -N zle-line-finish  # cursor on prompt end
+zle -N zle-line-finish                                     # cursor on prompt end
 
 function vi-dd-clear-line-insert {
-  BUFFER=""  # clear line
-  CURSOR=0  # start of line
-  zle vi-insert  # back to insert
+  BUFFER=""                                                # clear line
+  CURSOR=0                                                 # start of line
+  zle vi-insert                                            # back to insert
 }
 
-zle -N vi-dd-clear-line-insert  # register widget
-bindkey -M vicmd 'dd' vi-dd-clear-line-insert  # dd clears and inserts
+zle -N vi-dd-clear-line-insert                             # register widget
+bindkey -M vicmd 'dd' vi-dd-clear-line-insert              # dd clears and inserts
 
 # -----------------------------------------------------------------------------
 # History search
 # -----------------------------------------------------------------------------
 
-autoload -Uz up-line-or-beginning-search down-line-or-beginning-search  # prefix search
+# Prefix-matching history search.
+autoload -Uz up-line-or-beginning-search down-line-or-beginning-search
 
-zle -N up-line-or-beginning-search  # register up search
-zle -N down-line-or-beginning-search  # register down search
+zle -N up-line-or-beginning-search                         # register up search
+zle -N down-line-or-beginning-search                       # register down search
 
-bindkey '^[[A' up-line-or-beginning-search  # up searches prefix
-bindkey '^[[B' down-line-or-beginning-search  # down searches prefix
+bindkey '^[[A' up-line-or-beginning-search                 # up searches prefix
+bindkey '^[[B' down-line-or-beginning-search               # down searches prefix
 
 {{ if eq .machine_kind "omarchy" -}}
 # -----------------------------------------------------------------------------
 # Omarchy prompt
 # -----------------------------------------------------------------------------
 
-if [ -f "$HOME/.config/omarchy/current/theme/starship.toml" ]; then  # Omarchy theme exists
-  export STARSHIP_CONFIG="$HOME/.config/omarchy/current/theme/starship.toml"  # use Omarchy theme
+if [ -f "$HOME/.config/omarchy/current/theme/starship.toml" ]; then
+  export STARSHIP_CONFIG="$HOME/.config/omarchy/current/theme/starship.toml"
 fi
 {{- end }}
 
@@ -169,78 +172,81 @@ fi
 # Prompt
 # -----------------------------------------------------------------------------
 
-command -v starship >/dev/null && eval "$(starship init zsh)"  # load prompt
+command -v starship >/dev/null && eval "$(starship init zsh)"
 
 # -----------------------------------------------------------------------------
 # fzf
 # -----------------------------------------------------------------------------
 
-if command -v fzf >/dev/null; then  # fzf installed
+if command -v fzf >/dev/null; then                         # fzf installed
 {{ if .is_mac -}}
-  source <(fzf --zsh)  # fzf keybinds
+  source <(fzf --zsh)                                      # fzf keybinds
 {{ else -}}
-  source /usr/share/fzf/key-bindings.zsh 2>/dev/null  # fzf keys
-  source /usr/share/fzf/completion.zsh 2>/dev/null  # fzf completion
+  source /usr/share/fzf/key-bindings.zsh 2>/dev/null       # fzf keys
+  source /usr/share/fzf/completion.zsh 2>/dev/null         # fzf completion
 {{- end }}
 fi
 
+# History picker layout.
 export FZF_CTRL_R_OPTS="
   --reverse
   --height=40%
   --bind 'ctrl-/:toggle-preview'
   --preview-window=down,3,wrap
-"  # history picker layout
+"
 
-bindkey 'ç' fzf-cd-widget  # Alt+C eurkey override
+bindkey 'ç' fzf-cd-widget                                  # Alt+C eurkey override
 
 # -----------------------------------------------------------------------------
 # Directory jumping
 # -----------------------------------------------------------------------------
 
-command -v zoxide >/dev/null && eval "$(zoxide init zsh --cmd cd)"  # smart cd (doctor suppressed via _ZO_DOCTOR=0 in .zshenv)
+# Smart cd. _ZO_DOCTOR=0 in .zshenv silences `zoxide doctor`.
+command -v zoxide >/dev/null && eval "$(zoxide init zsh --cmd cd)"
 
 # -----------------------------------------------------------------------------
 # Runtime management
 # -----------------------------------------------------------------------------
 
-export MISE_IGNORED_CONFIG_PATHS="{{ .chezmoi.sourceDir }}"  # skip chezmoi source mise.toml
+# Skip chezmoi source mise.toml.
+export MISE_IGNORED_CONFIG_PATHS="{{ .chezmoi.sourceDir }}"
 command -v mise >/dev/null && eval "$(mise activate zsh)"  # runtime shims
 
 # -----------------------------------------------------------------------------
 # Command correction
 # -----------------------------------------------------------------------------
 
-export _PR_AI_DISABLE=1  # opt out of pay-respects AI suggestions
-if command -v pay-respects >/dev/null; then  # pay-respects installed
-  eval "$(pay-respects zsh --alias f)"  # rerun corrected command via `f`
-  alias F=f fuck=f  # extra triggers
+export _PR_AI_DISABLE=1                                    # disable pay-respects AI
+if command -v pay-respects >/dev/null; then                # pay-respects installed
+  eval "$(pay-respects zsh --alias f)"                     # use `f` to rerun fixed
+  alias F=f fuck=f                                         # extra triggers
 fi
 
 # -----------------------------------------------------------------------------
 # Modern CLI aliases
 # -----------------------------------------------------------------------------
 
-alias ls='eza --icons --group-directories-first'  # better ls
-alias ll='eza -lah --icons --group-directories-first --git'  # long ls
-alias la='eza -a --icons --group-directories-first'  # all files
-alias tree='eza --tree --icons --git-ignore'  # tree view
+alias ls='eza --icons --group-directories-first'           # better ls
+alias ll='eza -lah --icons --group-directories-first --git'
+alias la='eza -a --icons --group-directories-first'        # all files
+alias tree='eza --tree --icons --git-ignore'               # tree view
 
-if command -v bat >/dev/null 2>&1; then  # bat installed
-  alias cat='bat --style=plain --paging=never'  # better cat
-elif command -v batcat >/dev/null 2>&1; then  # Debian name
-  alias cat='batcat --style=plain --paging=never'  # better cat
+if command -v bat >/dev/null 2>&1; then                    # bat installed
+  alias cat='bat --style=plain --paging=never'             # better cat
+elif command -v batcat >/dev/null 2>&1; then               # Debian name
+  alias cat='batcat --style=plain --paging=never'          # better cat
 fi
 
-if ! command -v fd >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then  # Debian name
-  alias fd='fdfind'  # normalize fd
+if ! command -v fd >/dev/null 2>&1 && command -v fdfind >/dev/null 2>&1; then
+  alias fd='fdfind'                                        # normalize fd
 fi
 
-alias top='btop'  # better top
-alias du='dust'  # better du
-alias ps='procs'  # better ps
-alias lg='lazygit'  # git UI
+alias top='btop'                                           # better top
+alias du='dust'                                            # better du
+alias ps='procs'                                           # better ps
+alias lg='lazygit'                                         # git UI
 
-# Cross-platform clipboard: macOS pbcopy, Wayland wl-copy, X11 xclip fallback
+# Cross-platform clipboard: macOS pbcopy, Wayland wl-copy, X11 xclip fallback.
 if command -v pbcopy >/dev/null 2>&1; then
   alias clip='pbcopy'
 elif [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
@@ -248,12 +254,15 @@ elif [ -n "${WAYLAND_DISPLAY:-}" ] && command -v wl-copy >/dev/null 2>&1; then
 elif command -v xclip >/dev/null 2>&1; then
   alias clip='xclip -selection clipboard'
 fi
-ob() { cd ~/vaults/main && nvim "${@:-.}"; }  # open vault in nvim
-myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
+ob() { cd ~/vaults/main && nvim "${@:-.}"; }               # open vault in nvim
+
+# Edit dotfiles with Claude; nag if a chezmoi update is pending.
+myconf() {
   local src behind drift ans
   src="$(chezmoi source-path)" || return
   cd "$src" || return
-  git fetch --quiet 2>/dev/null  # refresh refs so 'behind' is accurate; offline-tolerant
+  # Refresh refs so 'behind' is accurate; offline-tolerant.
+  git fetch --quiet 2>/dev/null
   behind=$(git rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
   # Exclude ' R ...' lines: those are run_after_ scripts that run every apply by design, not drift.
   drift=$(chezmoi status 2>/dev/null | grep -v '^.R' | grep -c .)
@@ -270,8 +279,8 @@ myconf() {  # edit dotfiles with Claude; nag if a chezmoi update is pending
   claude "$@"
 }
 
-claude() { command claude --effort xhigh "$@"; }  # default to xhigh; later --effort flags override
-command -v claude >/dev/null && alias cc='claude'  # short Claude
+claude() { command claude --effort xhigh "$@"; }           # default xhigh; --effort wins
+command -v claude >/dev/null && alias cc='claude'          # short Claude
 
 # -----------------------------------------------------------------------------
 # Chezmoi auto-update — async, ~twice a day, never blocks shell start
@@ -280,14 +289,15 @@ command -v claude >/dev/null && alias cc='claude'  # short Claude
 # -----------------------------------------------------------------------------
 
 {{ if ne .machine_kind "devcontainer" -}}
-if command -v chezmoi >/dev/null; then  # chezmoi available
+if command -v chezmoi >/dev/null; then                     # chezmoi available
   () {
-    local stamp="$HOME/.cache/chezmoi-update.stamp"  # last-run marker
-    local -a stale=( $stamp(Nmh+12) )  # non-empty if mtime > 12h
-    [[ -e $stamp && ${#stale} -eq 0 ]] && return  # fresh enough, skip
-    mkdir -p ${stamp:h}  # ensure cache dir
-    touch $stamp  # claim slot first so concurrent shells don't re-fire
-    (chezmoi update >"$HOME/.cache/chezmoi-update.log" 2>&1 &)  # subshell exit detaches the child
+    local stamp="$HOME/.cache/chezmoi-update.stamp"        # last-run marker
+    local -a stale=( $stamp(Nmh+12) )                      # non-empty if mtime > 12h
+    [[ -e $stamp && ${#stale} -eq 0 ]] && return           # fresh enough, skip
+    mkdir -p ${stamp:h}                                    # ensure cache dir
+    touch $stamp                                           # claim slot before fork
+    # Subshell exit detaches the child.
+    (chezmoi update >"$HOME/.cache/chezmoi-update.log" 2>&1 &)
   }
 fi
 {{- end }}
@@ -296,14 +306,14 @@ fi
 # Local overrides
 # -----------------------------------------------------------------------------
 
-[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"  # machine-local config
+[ -f "$HOME/.zshrc.local" ] && source "$HOME/.zshrc.local"
 
 # -----------------------------------------------------------------------------
 # Local secrets
 # -----------------------------------------------------------------------------
 
-if [ -d "$HOME/.config/dotfiles/secrets/env.d" ]; then  # local secrets dir
-  for f in "$HOME"/.config/dotfiles/secrets/env.d/*.zsh(N); do  # each secret file
-    source "$f"  # load secrets
+if [ -d "$HOME/.config/dotfiles/secrets/env.d" ]; then     # local secrets dir
+  for f in "$HOME"/.config/dotfiles/secrets/env.d/*.zsh(N); do
+    source "$f"                                            # load secrets
   done
 fi
