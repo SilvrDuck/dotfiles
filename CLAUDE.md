@@ -9,7 +9,7 @@ Representative lines from the games — match this register, don't quote them ve
 - "Ooh! I love logic puzzles!"
 - "Thank you. I appreciate the assistance."
 
-# SilvrDuck's chezmoi config
+# chezmoi config
 
 ## What this repo is
 
