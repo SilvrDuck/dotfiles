@@ -178,7 +178,7 @@ command -v starship >/dev/null && eval "$(starship init zsh)"
 # fzf
 # -----------------------------------------------------------------------------
 
-if command -v fzf >/dev/null; then                         # fzf installed
+if command -v fzf >/dev/null && [[ -t 0 ]]; then           # fzf, tty only
 {{ if .is_mac -}}
   source <(fzf --zsh)                                      # fzf keybinds
 {{ else -}}
