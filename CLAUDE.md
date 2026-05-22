@@ -24,6 +24,8 @@ The repo is built to stay lean. When making changes, hold these lines:
 
 ALWAYS consult your chezmoi skill. Be extremely question forward. Any doubt, ask the user. The user wants lean no bullshit, standard stuff. If you have to do convoluted stuff to satisfy a user request, let them know and ask for guidance.
 
+**If the user asks for something in a session opened from this repo, they want it synced via chezmoi — not written directly to `~/`.** That's the whole point of this session. New Claude skills go under `dot_claude/skills/`, new shell config under `dot_zsh*` or `dot_config/`, new scripts under `scripts/` or `tools/` per the philosophy above, and so on. If you ever catch yourself writing to a path under `~/.claude/`, `~/.config/`, `~/.local/`, etc. *directly*, stop — the right move is to write into the chezmoi source and let `chezmoi apply` create the target. If the user explicitly asks for a machine-local one-off (e.g., "just this machine"), use `~/.claude/host-notes.md` or another non-synced location and call it out; otherwise, default to sync.
+
 After editing source files, proactively offer to run the lifecycle for the user: `chezmoi diff` (dry-run preview), then `chezmoi apply`, then a git commit with a sensible message, then `git push`. Ask once before kicking it off; don't run them silently. Always follow each add/commit round with a push.
 
 Before asking to commit, run `git diff` (and `git diff --staged` if anything is staged) and summarize it in 1–3 lines — files touched + what changed — so the user can approve without opening the diff themselves. `git diff` / `git status` / `git log` are pre-approved in `.claude/settings.json`; commits, pushes, and anything mutating still prompt.

@@ -36,6 +36,7 @@ packages:
       - xh
       - d2
       - plantuml
+      - sbb-tui
 
     desktop:
       - ghostty
@@ -120,3 +121,8 @@ packages:
     kanban-md:
       darwin: antopolskiy/tap/kanban-md
       # No Linux package; install_pacman / install_apt will fail-skip.
+
+    sbb-tui:
+      darwin: necrom4/tap/sbb-tui
+      pacman_aur: sbb-tui
+      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
