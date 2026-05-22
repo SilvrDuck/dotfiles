@@ -64,7 +64,7 @@ RUN MACHINE_KIND=devcontainer sh -c "$(curl -fsLS https://get.chezmoi.io)" -- in
 
 ```sh
 # open this repo in Claude Code from anywhere
-myconf
+clank
 ```
 
 Then:

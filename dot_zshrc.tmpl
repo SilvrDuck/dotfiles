@@ -258,7 +258,7 @@ fi
 ob() { cd ~/vaults/main && nvim "${@:-.}"; }               # open vault in nvim
 
 # Edit dotfiles with Claude; nag if a chezmoi update is pending.
-myconf() {
+clank() {
   local src behind drift ans
   src="$(chezmoi source-path)" || return
   cd "$src" || return
