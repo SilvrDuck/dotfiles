@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# Prompt for a fleeting note via a native picker, then capture it via
+# ~/.local/bin/fleet. Cancel or empty input -> exit 0 without writing.
+#
+# - Linux: tries walker, fuzzel, wofi, rofi (first found wins).
+# - macOS: AppleScript dialog (single-line). Useful as a non-Raycast
+#   fallback; Raycast users normally type inline in Raycast instead.
+
+set -uo pipefail
+
+prompt_linux() {
+  for cmd in walker fuzzel wofi rofi; do
+    command -v "$cmd" >/dev/null 2>&1 || continue
+    case "$cmd" in
+      walker) walker --dmenu --placeholder 'Fleet note' < /dev/null ;;
+      fuzzel) fuzzel --dmenu --prompt 'Fleet: ' --lines 0 < /dev/null ;;
+      wofi)   wofi --dmenu --prompt 'Fleet' < /dev/null ;;
+      rofi)   rofi -dmenu -p 'Fleet' < /dev/null ;;
+    esac
+    return
+  done
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -u critical 'fleet' 'no dmenu-style picker found (walker/fuzzel/wofi/rofi)'
+  else
+    echo 'fleet-prompt: no dmenu-style picker found' >&2
+  fi
+  return 1
+}
+
+prompt_macos() {
+  osascript \
+    -e 'tell application "System Events" to display dialog "Fleeting note:" default answer "" with title "Fleet" buttons {"Cancel","Save"} default button "Save"' \
+    -e 'text returned of result' 2>/dev/null
+}
+
+case "$(uname -s)" in
+  Darwin) text="$(prompt_macos)" ;;
+  Linux)  text="$(prompt_linux)" ;;
+  *)      echo "fleet-prompt: unsupported OS" >&2; exit 1 ;;
+esac
+
+[ -n "${text:-}" ] || exit 0
+exec "$HOME/.local/bin/fleet" "$text"

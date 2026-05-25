@@ -98,3 +98,12 @@ systemctl --user start vault-sync.service
 # stop and disable the timer
 systemctl --user disable --now vault-sync.timer
 ```
+
+## Raycast
+
+macOS only. The `fleet` Raycast script command ships in `~/.local/share/raycast-scripts/`.
+
+1. Raycast → Settings → Extensions → Script Commands → *Add Script Directory* → `~/.local/share/raycast-scripts`
+2. Bind the *Fleet* command to ⌃⌥⌘ Space (matches the Omarchy keybinding).
+
+⌃⌥⌘ Space is the default Character Viewer shortcut on macOS — disable it in System Settings → Keyboard → Keyboard Shortcuts → Input Sources if Raycast doesn't capture the chord.

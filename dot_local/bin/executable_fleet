@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+# Capture a fleeting note into the Obsidian vault.
+#
+# Renders Templates/FleetingQuickAdd.md into Fleeting/<title>.md.
+# Title is the first sentence of the input. On collision the filename
+# gets ` (2)`, ` (3)`, … appended. Multi-line input is supported; the
+# prefix on the {{VALUE}} line (e.g. callout marker `> `) is repeated
+# on continuation lines.
+#
+# Usage:
+#   fleet "remember to water the plants"
+#   echo "long note..." | fleet
+#
+# Env:
+#   VAULT_DIR   path to the vault (default: ~/vaults/main)
+
+set -euo pipefail
+
+VAULT="${VAULT_DIR:-$HOME/vaults/main}"
+TEMPLATE="$VAULT/Templates/FleetingQuickAdd.md"
+DEST_DIR="$VAULT/Fleeting"
+
+if [ "$#" -gt 0 ]; then
+  input="$*"
+else
+  input="$(cat)"
+fi
+
+# Strip leading/trailing whitespace.
+input="${input#"${input%%[![:space:]]*}"}"
+input="${input%"${input##*[![:space:]]}"}"
+
+if [ -z "$input" ]; then
+  echo "fleet: empty note, nothing to capture" >&2
+  exit 1
+fi
+
+[ -f "$TEMPLATE" ] || { echo "fleet: template not found at $TEMPLATE" >&2; exit 1; }
+mkdir -p "$DEST_DIR"
+
+# Title = first sentence of the first line.
+first_line="${input%%$'\n'*}"
+title="$(printf '%s' "$first_line" | sed -E 's/[.!?].*$//')"
+
+# Sanitize for filename: drop path separators / chars that break
+# Finder & Obsidian, squash whitespace, cap length.
+title="$(printf '%s' "$title" | tr -d '/\\:*?"<>|' | tr -s '[:space:]' ' ')"
+title="${title# }"
+title="${title% }"
+maxlen=80
+if [ "${#title}" -gt "$maxlen" ]; then
+  title="${title:0:$maxlen}"
+  title="${title% }"
+fi
+[ -n "$title" ] || title="note"
+
+stamp_long="$(date +'%Y%m%d%H%M%S')"
+stamp_iso="$(date +'%Y-%m-%d %H:%M')"
+
+# Find the prefix before {{VALUE}} in the template so multi-line input
+# keeps the same prefix (callout marker etc.) on every line.
+value_prefix=""
+while IFS= read -r line || [ -n "$line" ]; do
+  if [[ "$line" == *"{{VALUE}}"* ]]; then
+    value_prefix="${line%%\{\{VALUE\}\}*}"
+    break
+  fi
+done < "$TEMPLATE"
+
+indented_input="${input//$'\n'/$'\n'$value_prefix}"
+
+content="$(cat "$TEMPLATE")"
+content="${content//\{\{DATE:YYYYMMDDHHmmss\}\}/$stamp_long}"
+content="${content//\{\{DATE:YYYY-MM-DD HH:mm\}\}/$stamp_iso}"
+content="${content//\{\{VALUE\}\}/$indented_input}"
+
+dest="$DEST_DIR/$title.md"
+if [ -e "$dest" ]; then
+  i=2
+  while [ -e "$DEST_DIR/$title ($i).md" ]; do
+    i=$((i + 1))
+  done
+  dest="$DEST_DIR/$title ($i).md"
+fi
+
+printf '%s\n' "$content" > "$dest"
+printf '%s\n' "$dest"
