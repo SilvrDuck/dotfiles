@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Re-apply local patches to Obsidian plugins on every chezmoi apply.
+#
+# Plugins ship compiled JS that Obsidian's auto-updater silently overwrites,
+# so we re-assert our local edits each apply. One subscript per patch lives
+# under tools/obsidian-patches/; this umbrella resolves the vault root,
+# invokes each subscript with it, and aggregates exit codes.
+#
+# Behavior:
+#   - vault absent ............................. silent no-op
+#   - all patches succeed (or are no-ops) ...... silent (subscripts may log
+#                                                one line when they re-patch)
+#   - any subscript fails ...................... loud error, exit 1
+#
+# Override the vault location with OBSIDIAN_VAULT=/path/to/vault.
+set -euo pipefail
+
+VAULT="${OBSIDIAN_VAULT:-$HOME/vaults/main}"
+[ -d "$VAULT/.obsidian" ] || exit 0
+
+PATCH_DIR="{{ .chezmoi.sourceDir }}/tools/obsidian-patches"
+if [ ! -d "$PATCH_DIR" ]; then
+  echo "[patch-obsidian] ERROR: patch dir not found: $PATCH_DIR" >&2
+  exit 1
+fi
+
+rc=0
+for sub in "$PATCH_DIR"/*.sh; do
+  case "$(basename "$sub")" in _*) continue ;; esac
+  [ -x "$sub" ] || continue
+  "$sub" "$VAULT" || rc=$?
+done
+exit "$rc"
