@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+#
+# Install locally-authored Obsidian sidecar plugins into the vault.
+#
+# Each sidecar lives under tools/obsidian-sidecars/<plugin-id>/ and ships
+# the standard Obsidian plugin minimum: manifest.json + main.js (styles.css
+# optional). The dir name must match the manifest's `id` — that is what
+# Obsidian uses to identify the plugin.
+#
+# Idempotent: files are copied only when source and destination differ.
+# data.json is owned by Obsidian at runtime and never touched.
+#
+# After a first-time install or an update, Obsidian does not auto-reload
+# the plugin — you need to toggle it off/on in Settings → Community
+# Plugins, or restart Obsidian, for the new code to take effect. The
+# umbrella emits a one-line hint when it touches files so you notice.
+#
+# Behavior:
+#   - vault absent .............................. silent no-op
+#   - sidecars dir empty or missing ............. silent no-op
+#   - all sidecars up to date ................... silent
+#   - any sidecar installed/updated ............. one-line per change
+#   - missing manifest/main.js in source ........ loud error, exit 1
+#
+# Override the vault location with OBSIDIAN_VAULT=/path/to/vault.
+set -euo pipefail
+
+VAULT="${OBSIDIAN_VAULT:-$HOME/vaults/main}"
+[ -d "$VAULT/.obsidian" ] || exit 0
+
+SRC_DIR="{{ .chezmoi.sourceDir }}/tools/obsidian-sidecars"
+[ -d "$SRC_DIR" ] || exit 0
+
+shopt -s nullglob
+sidecars=("$SRC_DIR"/*/)
+shopt -u nullglob
+[ "${#sidecars[@]}" -gt 0 ] || exit 0
+
+for src in "${sidecars[@]}"; do
+  name=$(basename "$src")
+  dst="$VAULT/.obsidian/plugins/$name"
+
+  for required in manifest.json main.js; do
+    if [ ! -f "$src$required" ]; then
+      echo "[obsidian-sidecars] ERROR: $src is missing $required" >&2
+      exit 1
+    fi
+  done
+
+  manifest_id=$(jq -r '.id // ""' < "$src/manifest.json")
+  if [ "$manifest_id" != "$name" ]; then
+    echo "[obsidian-sidecars] ERROR: $src manifest.id='$manifest_id' must equal dir name '$name'" >&2
+    exit 1
+  fi
+
+  mkdir -p "$dst"
+  first_install=0
+  [ -f "$dst/manifest.json" ] || first_install=1
+
+  changed=0
+  for f in manifest.json main.js styles.css; do
+    [ -f "$src$f" ] || continue
+    if ! cmp -s "$src$f" "$dst/$f"; then
+      cp "$src$f" "$dst/$f"
+      changed=1
+    fi
+  done
+
+  if [ "$first_install" = "1" ]; then
+    echo "[obsidian-sidecars] installed $name → $dst"
+    echo "[obsidian-sidecars]   enable it once in Obsidian: Settings → Community Plugins → '$manifest_id'"
+  elif [ "$changed" = "1" ]; then
+    echo "[obsidian-sidecars] updated $name — reload Obsidian (or toggle the plugin) to pick up changes"
+  fi
+done
