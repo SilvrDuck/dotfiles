@@ -90,4 +90,6 @@ Explicitly NOT in the stack: `zsh-autocomplete`, `zsh-vi-mode` plugin, Atuin, ya
 - **New package:** add to one group in `.chezmoidata/packages.yaml`. Only add an `overrides:` entry if a manager uses a different name or install kind. The file-hash comment in `run_onchange_after_10-packages.sh.tmpl` re-triggers install on next apply.
 - **Python project work:** `mise` manages Python versions, `uv` manages project envs. `pyenv` is not installed and should not be added.
 - **Editing templates:** always preview with `chezmoi execute-template` or `chezmoi diff` before `apply`. Bootstrap scripts use `|| true` / `echo skipped` to survive partial environments (e.g., devcontainers without yay) — preserve that.
+- **Removing a managed file:** removing it from source state only un-manages the target; the file lingers on every machine that already applied. Add its `~`-relative path to `.chezmoiremove.tmpl` to actually delete it on next apply. If the file backs a live systemd timer or launchd LaunchAgent, disable the unit (`systemctl --user disable --now <unit>` / `launchctl bootout`) before applying — chezmoi removes the unit file, not the running unit.
+- **New repo-root docs / artifacts** (`ARCHIVE.md`, etc.) must be listed in `.chezmoiignore.tmpl` alongside `README.md` and `CLAUDE.md`, or chezmoi will copy them to `~/`.
 

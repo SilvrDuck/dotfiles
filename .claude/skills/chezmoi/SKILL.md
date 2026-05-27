@@ -62,6 +62,7 @@ Combine: `private_dot_ssh/private_encrypted_id_ed25519.tmpl`.
 ### Special source files / dirs
 
 - `.chezmoiignore` — gitignore-style patterns (templated). Skip from source state.
+- `.chezmoiremove` — newline-delimited list of `~`-relative target paths to delete on every apply (always templated, even without `.tmpl`). **Removing a file from source state only un-manages it; the target persists on every machine. Use this file when you actually want target deletion.**
 - `.chezmoidata.<fmt>` — static data merged into template context.
 - `.chezmoiexternal.<fmt>` — fetch archives, files, or git repos as managed content.
 - `.chezmoiscripts/` — scripts directory (alternative location for `run_*` scripts).
