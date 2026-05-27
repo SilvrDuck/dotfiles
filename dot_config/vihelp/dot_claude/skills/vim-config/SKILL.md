@@ -89,8 +89,6 @@ So `af` / `if` (function), `ac` / `ic` (class), `a]` / `i]` (bracket),
   parts are dict words.
 - YAML frontmatter auto-folded.
 - `LineNr` and `WinSeparator` tinted to match mode.
-- Vault auto-sync: files saved under `~/vaults/main` trigger a debounced
-  background `vault-sync` 2s later, flushed on `:q`.
 
 ## When to fetch upstream docs
 

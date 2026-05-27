@@ -47,6 +47,8 @@ If the working tree has dirty files or untracked paths you didn't touch, proacti
 
 **Public-internet audit before EVERY commit — mandatory, no exceptions.** This repo is published. Before staging anything, scan the full diff for: PII (name, email, employer, machine hostnames, `/home/<user>` paths, MAC/IP addresses), credentials of any form, internal/private URLs, machine-specific values, and *soft disclosures* — app/service preferences, regional hints, employer hints, anything that profiles the user. List every concrete finding in plain prose and get **explicit per-item approval from the user** before committing — no batched "looks fine?", no implicit consent, no "this seems harmless so I'll include it". Gitleaks catches credential patterns as a backstop; it does NOT catch soft disclosures. Manual review is the primary gate, gitleaks is the second.
 
+**Archive log.** `ARCHIVE.md` at repo root is a sparse, machine-oriented index of removed features → last-live commit hash + optional `archive/<slug>` tag. **Do NOT append on every deletion** — only add an entry when the user explicitly asks to archive a feature. Reading direction: when you want to know what something used to look like, consult `ARCHIVE.md` and `git show` the listed hash.
+
 ## Architecture
 
 Bootstrap chain (numeric prefix = order):

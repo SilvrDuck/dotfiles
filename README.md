@@ -19,7 +19,6 @@ $(chezmoi source-path)/scripts/setup-git-default-context
 $(chezmoi source-path)/scripts/setup-git-additional-context
 $(chezmoi source-path)/scripts/setup-api-keys
 $(chezmoi source-path)/scripts/setup-keyboard-layout
-$(chezmoi source-path)/scripts/setup-obsidian-vault
 $(chezmoi source-path)/scripts/setup-interactive-logins
 $(chezmoi source-path)/scripts/setup-gitleaks-local
 ```
@@ -77,28 +76,6 @@ Then:
 
 # enumerate what the best-effort install skipped on this machine
 /diagnostic
-```
-
-## Obsidian
-
-```sh
-# macOS
-
-# follow sync log
-tail -f ~/Library/Logs/vault-sync.log
-# run sync now
-launchctl kickstart -k gui/$(id -u)/com.silvrduck.vault-sync
-# uninstall the launch agent
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.silvrduck.vault-sync.plist
-
-# Linux
-
-# follow sync log
-journalctl --user -u vault-sync.service -f
-# run sync now
-systemctl --user start vault-sync.service
-# stop and disable the timer
-systemctl --user disable --now vault-sync.timer
 ```
 
 ## Raycast
