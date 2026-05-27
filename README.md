@@ -12,6 +12,8 @@ sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
 
 ## Scripts
 
+Stuff that leads to more annoyance than help when implemented in the automated post intall script.
+
 ```bash
 $(chezmoi source-path)/scripts/setup-git-default-context
 $(chezmoi source-path)/scripts/setup-git-additional-context
