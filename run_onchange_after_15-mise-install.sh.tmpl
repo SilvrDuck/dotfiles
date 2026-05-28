@@ -1,7 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# mise config hash: {{ include "dot_config/mise/config.toml" | sha256sum }}
+# Owns the baseline of ~/.config/mise/config.toml so chezmoi does not have
+# to track a file that `mise use ...` will rewrite. Write-once: if the file
+# already exists, we leave it alone (the user or mise may have edited it).
+
+CFG="${XDG_CONFIG_HOME:-$HOME/.config}/mise/config.toml"
+mkdir -p "$(dirname "$CFG")"
+
+if [ ! -f "$CFG" ]; then
+  echo "[mise] writing baseline $CFG"
+  cat >"$CFG" <<'TOML'
+[tools]
+python = "3.14"
+node = "lts"
+go = "latest"
+
+[settings]
+idiomatic_version_file_enable_tools = ["python", "node"]
+python.uv_venv_auto = "source"
+# Auto-trust every mise.toml under home so the shell hook, `mise install`, and
+# `mise x` stop prompting per-project. Threat model: only clone repos I trust.
+trusted_config_paths = ["~"]
+TOML
+fi
 
 if command -v mise >/dev/null 2>&1; then
   echo "[mise] installing configured runtimes"
