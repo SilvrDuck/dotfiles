@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Pre-installs LazyVim plugins so the first interactive `nvim` doesn't fail
+# when lazy.nvim's self-bootstrap clone races with a still-warming PATH (the
+# bug observed on a fresh Mac: `module 'lazy' not found`).
+#
+# Skips quietly if nvim isn't on PATH yet (devcontainer without neovim, or
+# the brew install in step 10 silently failed).
+
+if ! command -v nvim >/dev/null 2>&1; then
+  echo "[nvim] skipped: nvim not installed"
+  exit 0
+fi
+
+echo "[nvim] headless plugin sync"
+nvim --headless "+Lazy! sync" +qa 2>/dev/null || echo "[nvim] sync skipped or failed"

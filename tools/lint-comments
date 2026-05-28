@@ -15,6 +15,10 @@ Usage:
                                           the file_path it names
 """
 
+# PEP 563: keeps `int | None` annotations lazy so the file parses on
+# Python 3.9 (Apple's stock CLT Python).
+from __future__ import annotations
+
 import json
 import sys
 from pathlib import Path

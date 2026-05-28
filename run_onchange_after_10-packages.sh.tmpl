@@ -35,11 +35,15 @@ fi
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $kind := "brew" }}
+{{ $skip := false }}
 {{ with (index $.packages.overrides $tool) }}
 {{ with (index . "darwin") }}{{ $name = . }}{{ end }}
 {{ with (index . "darwin_kind") }}{{ $kind = . }}{{ end }}
+{{ with (index . "darwin_skip") }}{{ $skip = . }}{{ end }}
 {{ end }}
+{{ if not $skip }}
 install_brew {{ $kind | quote }} {{ $name | quote }}
+{{ end }}
 {{ end }}
 
 {{ else if eq .chezmoi.os "linux" }}
@@ -104,10 +108,10 @@ fi
 {{ end }}
 
 # -----------------------------------------------------------------------------
-# AI CLIs
+# Upstream installers (AI CLIs, uv, and a few tools with broken packages)
 # -----------------------------------------------------------------------------
 
-{{ template "ai-cli-installers.sh" . }}
+{{ template "upstream-installers.sh" . }}
 
 # -----------------------------------------------------------------------------
 # Default login shell -> zsh (Linux only; macOS uses its own flow)

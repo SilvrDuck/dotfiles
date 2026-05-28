@@ -82,7 +82,8 @@ packages:
       apt_manual: neovim_tarball
 
     pay-respects:
-      darwin: timescam/homebrew-tap/pay-respects
+      # macOS: no working brew formula; installed via upstream-installers.sh.
+      darwin_skip: true
       pacman_aur: pay-respects-bin
       apt_manual: pay_respects_release
 

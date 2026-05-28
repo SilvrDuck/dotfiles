@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Registers MCP servers that need no interactive auth, for Claude Code and
+# OpenCode. Idempotent: `claude mcp add` errors are masked with `|| true`,
+# and the OpenCode jq merge always overwrites the key (no duplicates).
+#
+# Interactive MCPs (Context7 OAuth) live in scripts/setup-cli-logins instead.
+
+# Ensure the typical upstream-installer bin dir is on PATH for this script.
+export PATH="$HOME/.local/bin:$PATH"
+
+claude_add() {
+  local name="$1"; shift
+  echo "[mcp/claude] $name"
+  claude mcp add --transport stdio --scope user "$name" -- "$@" || true
+}
+
+opencode_set() {
+  local cfg="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
+  local name="$1"; shift
+  local args_json
+  args_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
+
+  mkdir -p "$(dirname "$cfg")"
+  [ -f "$cfg" ] || printf '{"$schema":"https://opencode.ai/config.json"}\n' >"$cfg"
+
+  local tmp
+  tmp="$(mktemp)"
+  jq --arg name "$name" --argjson args "$args_json" '
+    .mcp[$name] = {"type":"local","command":$args,"enabled":true}
+  ' "$cfg" >"$tmp" && mv "$tmp" "$cfg"
+  echo "[mcp/opencode] $name"
+}
+
+register() {
+  local name="$1"; shift
+  if command -v claude >/dev/null 2>&1; then
+    claude_add "$name" "$@"
+  fi
+  if command -v opencode >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+    opencode_set "$name" "$@"
+  fi
+}
+
+# -----------------------------------------------------------------------------
+# Playwright + Chrome DevTools (stdio, no auth)
+# -----------------------------------------------------------------------------
+
+register playwright      npx -y @playwright/mcp@latest
+register chrome-devtools npx -y chrome-devtools-mcp@latest
+
+# -----------------------------------------------------------------------------
+# Graphify (knowledge-graph MCP; needs uv, installed by upstream-installers.sh)
+# -----------------------------------------------------------------------------
+
+if command -v uv >/dev/null 2>&1; then
+  echo "[graphify] uv tool install graphifyy"
+  uv tool install --upgrade graphifyy >/dev/null 2>&1 || true
+
+  if command -v graphify >/dev/null 2>&1; then
+    command -v claude   >/dev/null 2>&1 && graphify install                     >/dev/null 2>&1 || true
+    command -v opencode >/dev/null 2>&1 && graphify install --platform opencode >/dev/null 2>&1 || true
+    echo "[graphify] registered"
+  else
+    echo "[graphify] skipped: graphify not on PATH after install"
+  fi
+else
+  echo "[graphify] skipped: uv not on PATH"
+fi

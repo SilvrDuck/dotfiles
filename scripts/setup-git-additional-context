@@ -92,6 +92,22 @@ EOF2
   fi
 }
 
+cat <<'OVERVIEW'
+
+setup-git-additional-context will:
+  - Create an SSH key at ~/.ssh/id_ed25519_<context>
+  - Write a per-context gitconfig under ~/.config/git/contexts/
+  - Add an includeIf so any repo under the chosen folder uses this identity
+  - Add SSH host aliases (github-<context>, optionally gitlab-<context>)
+  - Pre-trust github.com (and the GitLab host, if given) in known_hosts
+  - Optionally add URL rewrites so plain `git clone https://...` uses SSH
+
+Prefixes are org/user/group names that come right after the host in a clone
+URL, e.g. for https://github.com/acme/foo the prefix is "acme". Multiple
+prefixes go comma-separated, e.g. "acme,acme-infra". Leave blank to skip.
+
+OVERVIEW
+
 mkdir -p "$HOME/.ssh" "$HOME/.config/git/contexts"
 chmod 700 "$HOME/.ssh"
 
@@ -108,11 +124,15 @@ default_name="$(
 name="$(ask 'Git display name' "$default_name")"
 email="$(ask 'Git email for this context')"
 
-github_prefixes="$(ask 'GitHub org/user prefixes for clone rewrites, optional' '')"
+github_prefixes="$(ask 'GitHub org/user prefixes (comma-separated, blank to skip)' '')"
 
-gitlab_host_input="$(ask 'GitLab host' 'gitlab.com')"
+gitlab_host_input="$(ask 'GitLab host (blank to skip GitLab entirely)' '')"
 gitlab_host="$(normalize_host "$gitlab_host_input")"
-gitlab_prefixes="$(ask 'GitLab group/user prefixes for clone rewrites, optional' '')"
+if [[ -n "$gitlab_host" ]]; then
+  gitlab_prefixes="$(ask 'GitLab group/user prefixes (comma-separated, blank to skip)' '')"
+else
+  gitlab_prefixes=""
+fi
 
 key="$HOME/.ssh/id_ed25519_$ctx"
 config_file="$HOME/.config/git/contexts/$ctx.gitconfig"
@@ -168,7 +188,26 @@ touch "$ssh_config"
 chmod 600 "$ssh_config"
 
 append_ssh_host "$ssh_config" "$github_alias" "github.com" "$key"
-append_ssh_host "$ssh_config" "$gitlab_alias" "$gitlab_host" "$key"
+if [[ -n "$gitlab_host" ]]; then
+  append_ssh_host "$ssh_config" "$gitlab_alias" "$gitlab_host" "$key"
+fi
+
+known_hosts="$HOME/.ssh/known_hosts"
+touch "$known_hosts"
+chmod 600 "$known_hosts"
+
+trust_host() {
+  local host="$1"
+  if ! ssh-keygen -F "$host" -f "$known_hosts" >/dev/null 2>&1; then
+    ssh-keyscan -H "$host" >> "$known_hosts" 2>/dev/null \
+      && echo "Trusted host key for $host"
+  fi
+}
+
+trust_host github.com
+if [[ -n "$gitlab_host" ]]; then
+  trust_host "$gitlab_host"
+fi
 
 if [[ -n "$github_prefixes" ]]; then
   while IFS= read -r raw; do
@@ -177,7 +216,7 @@ if [[ -n "$github_prefixes" ]]; then
   done < <(printf '%s\n' "$github_prefixes" | tr ',' '\n')
 fi
 
-if [[ -n "$gitlab_prefixes" ]]; then
+if [[ -n "$gitlab_host" && -n "$gitlab_prefixes" ]]; then
   while IFS= read -r raw; do
     prefix="$(trim "$raw")"
     append_rewrite "$main" "$gitlab_alias" "$gitlab_host" "$prefix"
@@ -201,23 +240,44 @@ Context SSH key:
 
 GitHub SSH alias:
   $github_alias -> github.com
+EOF2
+
+if [[ -n "$gitlab_host" ]]; then
+  cat <<EOF2
 
 GitLab SSH alias:
   $gitlab_alias -> $gitlab_host
+EOF2
+fi
+
+cat <<EOF2
 
 Add this public key to the matching GitHub/GitLab accounts manually:
 
 $(cat "$key.pub")
 
-Suggested checks:
-  cd "$folder"
-  git config --show-origin user.email
+Suggested checks (run from a repo inside $folder, the identity only
+activates inside a git repo whose path matches the includeIf):
+  cd "$folder" && git init smoke && cd smoke
+  git config user.email      # should print: $email
   ssh -T git@$github_alias
-  ssh -T git@$gitlab_alias
+EOF2
+
+if [[ -n "$gitlab_host" ]]; then
+  echo "  ssh -T git@$gitlab_alias"
+fi
+
+cat <<EOF2
 
 Clone rewrite examples, if prefixes were configured:
   git clone https://github.com/<configured-prefix>/<repo>.git
-  git clone https://$gitlab_host/<configured-prefix>/<repo>.git
+EOF2
+
+if [[ -n "$gitlab_host" ]]; then
+  echo "  git clone https://$gitlab_host/<configured-prefix>/<repo>.git"
+fi
+
+cat <<EOF2
 
 If you left prefixes empty, that is fine.
 The context still applies to repos under:

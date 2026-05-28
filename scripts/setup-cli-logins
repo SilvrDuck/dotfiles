@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-cli-logins
+
+Per-machine browser/OAuth logins for the CLIs and one MCP that need them.
+Walks the list once; y/N per item, single keystroke (no Enter needed).
+
+Covered:
+  GitHub      - gh auth login
+  GitLab      - glab auth login
+  Claude Code - claude /login
+  Pi          - pi /login
+  Context7    - npx ctx7 setup   (MCP, browser OAuth)
+HELP
+  exit 0
+fi
+
+cat <<'OVERVIEW'
+
+setup-cli-logins will offer to log into:
+  - GitHub        (`gh auth login`)
+  - GitLab        (`glab auth login`)
+  - Claude Code   (`claude /login`)
+  - Pi            (`pi /login`)
+  - Context7 MCP  (`npx ctx7 setup`)
+
+Single-key answers: press y or n (no Enter needed).
+
+OVERVIEW
+
+ask_run() {
+  local name="$1"; shift
+  local ans
+  printf 'Set up %s? [y/N] ' "$name"
+  read -r -n 1 ans || true
+  echo
+  [[ "$ans" =~ ^[Yy]$ ]] || return 0
+  "$@"
+}
+
+require_cmd() {
+  local cmd="$1" hint="$2"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "$cmd not found. $hint" >&2
+    return 1
+  fi
+}
+
+login_gh()       { require_cmd gh     "Install via packages.yaml first."     && gh auth login; }
+login_glab()     { require_cmd glab   "Install glab first (brew/pacman/apt)." && glab auth login; }
+login_claude()   { require_cmd claude "Reapply chezmoi to install via upstream-installers.sh." && claude /login; }
+login_pi()       { require_cmd pi     "Reapply chezmoi to install via upstream-installers.sh." && pi /login; }
+login_context7() { require_cmd npx    "Install Node (e.g. mise install node)." && npx ctx7 setup; }
+
+ask_run "GitHub"        login_gh
+ask_run "GitLab"        login_glab
+ask_run "Claude Code"   login_claude
+ask_run "Pi"            login_pi
+ask_run "Context7 MCP"  login_context7
+
+echo "Done."

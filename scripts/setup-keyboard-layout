@@ -8,8 +8,9 @@ setup-keyboard-layout
 One-time EurKEY keyboard setup.
 
 macOS:
-  Installs EurKEY Next v1.4 from GitHub releases into:
+  Installs the latest EurKEY Next release that ships a .dmg asset into:
     ~/Library/Keyboard Layouts
+  (Upstream re-tags occasionally without assets; this picks the newest with one.)
 
 Linux:
   Checks whether the EurKEY XKB layout is available.
@@ -31,18 +32,24 @@ case "$(uname -s)" in
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    echo "[eurkey] Fetching EurKEY Next v1.4 release metadata"
-    dmg_url="$(
-      curl -fsSL https://api.github.com/repos/felixfoertsch/EurKEY-Next/releases/tags/v1.4 \
-        | jq -r '.assets[] | select(.name | test("\\.dmg$")) | .browser_download_url' \
-        | head -n 1
-    )"
+    echo "[eurkey] Finding latest EurKEY Next release with a .dmg asset"
+    read -r tag dmg_url < <(
+      curl -fsSL https://api.github.com/repos/felixfoertsch/EurKEY-Next/releases \
+        | jq -r '
+            map(select(.draft == false and .prerelease == false))
+            | map({tag: .tag_name, dmg: (.assets[] | select(.name | test("\\.dmg$")) | .browser_download_url)})
+            | first
+            | "\(.tag) \(.dmg)"
+          '
+    )
 
-    if [[ -z "$dmg_url" || "$dmg_url" == "null" ]]; then
-      echo "Could not find a .dmg asset for EurKEY Next v1.4."
-      echo "Open manually: https://github.com/felixfoertsch/EurKEY-Next/releases/tag/v1.4"
+    if [[ -z "${dmg_url:-}" || "$dmg_url" == "null" ]]; then
+      echo "No EurKEY Next release with a .dmg asset found."
+      echo "Open manually: https://github.com/felixfoertsch/EurKEY-Next/releases"
       exit 1
     fi
+
+    echo "[eurkey] Using release $tag"
 
     echo "[eurkey] Downloading $dmg_url"
     curl -fL "$dmg_url" -o "$tmpdir/EurKEY-Next.dmg"
@@ -69,15 +76,14 @@ case "$(uname -s)" in
 
     hdiutil detach "$mount_dir" -quiet || true
 
-    cat <<'DONE'
+    cat <<DONE
 
-EurKEY Next v1.4 installed.
+EurKEY Next $tag installed.
 
 Now:
   1. Log out and back in, or restart.
   2. Open System Settings -> Keyboard -> Input Sources.
   3. Add "EurKEY Next".
-  4. Select the v1.4 layout.
 
 DONE
     ;;

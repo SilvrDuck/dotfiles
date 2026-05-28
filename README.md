@@ -6,20 +6,30 @@ Tries to not override Omarchy stuff.
 
 ## Desktop
 
+On a fresh Mac, run first and wait for it to finish:
+
+```sh
+xcode-select --install
+```
+
+Then:
+
 ```sh
 sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
 ```
 
 ## Scripts
 
-Stuff that leads to more annoyance than help when implemented in the automated post intall script.
+Things that genuinely need human input (SSH keys, secrets, browser OAuth,
+GUI follow-ups). Anything that can be unattended lives in the chezmoi
+bootstrap chain, not here.
 
 ```bash
 $(chezmoi source-path)/scripts/setup-git-default-context
 $(chezmoi source-path)/scripts/setup-git-additional-context
 $(chezmoi source-path)/scripts/setup-api-keys
 $(chezmoi source-path)/scripts/setup-keyboard-layout
-$(chezmoi source-path)/scripts/setup-interactive-logins
+$(chezmoi source-path)/scripts/setup-cli-logins
 $(chezmoi source-path)/scripts/setup-gitleaks-local
 ```
 

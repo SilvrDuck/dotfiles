@@ -12,7 +12,9 @@ fi
 {{ if eq .chezmoi.os "darwin" -}}
 if ! command -v brew >/dev/null 2>&1; then
   echo "[prereqs] Installing Homebrew"
-  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  # NONINTERACTIVE skips the "press RETURN" prompt; sudo prompt still appears
+  # on a fresh machine because /opt/homebrew creation needs root.
+  NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
 if [ -x /opt/homebrew/bin/brew ]; then
