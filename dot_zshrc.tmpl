@@ -274,7 +274,7 @@ clank() {
     read -r "ans?run 'chezmoi update' now? [Y/n] "
     case "${ans:l}" in
       n|no) ;;
-      *) chezmoi update ;;
+      *) chezmoi update --refresh-externals ;;
     esac
   fi
   claude "$@"
@@ -315,7 +315,7 @@ _dotfiles_async() {
 }
 
 if command -v chezmoi >/dev/null; then
-  _dotfiles_async 2 chezmoi-update chezmoi update
+  _dotfiles_async 2 chezmoi-update chezmoi update --refresh-externals
   () {
     local src; src="$(chezmoi source-path 2>/dev/null)" || return
     local script="$src/tools/auto-update-tools"

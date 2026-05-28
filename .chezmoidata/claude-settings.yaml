@@ -14,7 +14,7 @@ claude_settings:
     context7@claude-plugins-official: true
     code-review@claude-plugins-official: true
     code-simplifier@claude-plugins-official: true
-    skill-creator@claude-plugins-official: true
+    skill-creator@claude-plugins-official: false
     github@claude-plugins-official: true
     playwright@claude-plugins-official: true
     claude-md-management@claude-plugins-official: true

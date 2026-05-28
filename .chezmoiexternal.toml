@@ -1,0 +1,10 @@
+# Shareable personal skills live in their own repo now (github.com/SilvrDuck/
+# skills). Clone it here once; run_after_40-skills-fanout symlinks each skill
+# into the dirs Claude / opencode / pi scan. Updated by `chezmoi apply` /
+# `chezmoi update` (at most once per refreshPeriod; --refresh-externals forces).
+[".local/share/silvrduck-skills"]
+    type = "git-repo"
+    url = "https://github.com/SilvrDuck/skills.git"
+    refreshPeriod = "24h"
+    clone.args = ["--depth=1"]
+    pull.args = ["--ff-only"]

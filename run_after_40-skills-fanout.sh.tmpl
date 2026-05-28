@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Fan the SilvrDuck skills (cloned by .chezmoiexternal) out to every AI tool
+# that scans a skills directory: Claude reads ~/.claude/skills, opencode + pi
+# read ~/.agents/skills. Symlinks keep one source of truth and short,
+# un-namespaced names (e.g. /doubt instead of /silvrduck:doubt).
+#
+# Best-effort: if the clone is absent (offline / devcontainer / failed fetch),
+# skip quietly and leave whatever is already on disk untouched. Runs on every
+# apply but stays silent unless it actually adds, removes, or repoints a link.
+
+SRC="${HOME}/.local/share/silvrduck-skills/skills"
+TARGETS=("${HOME}/.claude/skills" "${HOME}/.agents/skills")
+
+if [ ! -d "$SRC" ]; then
+  exit 0
+fi
+
+changed=0
+
+# Prune symlinks that point into the clone but whose skill no longer exists
+# upstream (handles skills deleted from the repo). Only touches links into the
+# clone, so omarchy / keepers / unrelated entries are left alone.
+for dir in "${TARGETS[@]}"; do
+  mkdir -p "$dir"
+  for link in "$dir"/*; do
+    [ -L "$link" ] || continue
+    case "$(readlink "$link")" in
+      "$SRC"/*)
+        if [ ! -e "$link" ]; then
+          rm -f "$link"
+          changed=1
+        fi
+        ;;
+    esac
+  done
+done
+
+# (Re)link every skill in the clone into each target dir. A stale real dir of
+# the same name (the old chezmoi-tracked copy on an already-applied machine)
+# gets replaced by the symlink. Only names present in the clone are ever
+# touched, so keepers like context7-mcp / fastapi are never at risk.
+for skill in "$SRC"/*/; do
+  name="$(basename "$skill")"
+  src="${SRC}/${name}"
+  for dir in "${TARGETS[@]}"; do
+    dest="${dir}/${name}"
+    if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+      continue
+    fi
+    rm -rf "$dest"
+    ln -sfn "$src" "$dest"
+    changed=1
+  done
+done
+
+if [ "$changed" -eq 1 ]; then
+  echo "[skills-fanout] updated skill symlinks in ${TARGETS[*]}"
+fi
