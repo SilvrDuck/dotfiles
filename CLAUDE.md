@@ -60,6 +60,8 @@ Bootstrap chain (numeric prefix = order):
 
 Templates branch on `.machine_kind` and `.is_mac` / `.is_linux` / `.is_omarchy_detected`, all set by `.chezmoi.toml.tmpl`.
 
+**Agent skills** are sourced from a separate repo, not vendored here. `.chezmoiexternal.toml` clones `github.com/SilvrDuck/skills` to `~/.local/share/silvrduck-skills`; `run_after_40-skills-fanout.sh.tmpl` symlinks each skill into `~/.claude/skills` and `~/.agents/skills` so Claude, opencode, and pi all load them under short names. The async auto-updater and `clank` nag in `dot_zshrc.tmpl` run `chezmoi update --refresh-externals`, so pushes to the skills repo land automatically; a bare `chezmoi apply` refreshes on the `refreshPeriod` set in `.chezmoiexternal.toml`. Skills kept private — not published to SilvrDuck — stay vendored under `dot_claude/skills/`.
+
 `scripts/` (manual, not on PATH; paths in `README.md`):
 - `setup-git-default-context` — boring default identity + one SSH key + include `git-defaults`. No URL rewrites.
 - `setup-git-additional-context` — work/client identity: `includeIf` for a folder + dedicated SSH key + `Host github.com-<ctx>` aliases + `url.…insteadOf` rewrites for known org prefixes.
@@ -88,6 +90,7 @@ Explicitly NOT in the stack: `zsh-autocomplete`, `zsh-vi-mode` plugin, Atuin, ya
 ## Adding things
 
 - **New package:** add to one group in `.chezmoidata/packages.yaml`. Only add an `overrides:` entry if a manager uses a different name or install kind. The file-hash comment in `run_onchange_after_10-packages.sh.tmpl` re-triggers install on next apply.
+- **New skill:** publish shareable ones to `github.com/SilvrDuck/skills` — they fan out to every AI tool automatically (see Architecture). Keep private ones vendored under `dot_claude/skills/` (lands in `~/.claude/skills/`).
 - **Python project work:** `mise` manages Python versions, `uv` manages project envs. `pyenv` is not installed and should not be added.
 - **Editing templates:** always preview with `chezmoi execute-template` or `chezmoi diff` before `apply`. Bootstrap scripts use `|| true` / `echo skipped` to survive partial environments (e.g., devcontainers without yay) — preserve that.
 - **Removing a managed file:** removing it from source state only un-manages the target; the file lingers on every machine that already applied. Add its `~`-relative path to `.chezmoiremove.tmpl` to actually delete it on next apply. If the file backs a live systemd timer or launchd LaunchAgent, disable the unit (`systemctl --user disable --now <unit>` / `launchctl bootout`) before applying — chezmoi removes the unit file, not the running unit.
