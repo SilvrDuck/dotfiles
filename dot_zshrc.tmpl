@@ -284,23 +284,56 @@ claude() { command claude --effort xhigh "$@"; }           # default xhigh; --ef
 command -v claude >/dev/null && alias cc='claude'          # short Claude
 
 # -----------------------------------------------------------------------------
-# Chezmoi auto-update — async, ~twice a day, never blocks shell start
-# Interval-based (every 12h since last run), not wall-clock — first qualifying
-# shell after the window wins; concurrent shells skip via the stamp touch.
+# Auto-updates — async, interval-gated, never blocks shell start
+# Each job has its own cadence in hours. First qualifying shell after the
+# window wins; concurrent shells racing on startup skip via the stamp touch.
 # -----------------------------------------------------------------------------
 
 {{ if ne .machine_kind "devcontainer" -}}
-if command -v chezmoi >/dev/null; then                     # chezmoi available
+typeset -ga _dotfiles_async_jobs
+
+# Usage: _dotfiles_async <interval-hours> <job-name> <cmd> [args...]
+# Output → ~/.cache/<name>.log. On non-zero exit, ~/.cache/<name>.failed is
+# left behind so the next shell can surface a diagnosis prompt.
+_dotfiles_async() {
+  local hours="$1"; shift
+  local name="$1"; shift
+  _dotfiles_async_jobs+=( "$name" )
+  local stamp="$HOME/.cache/$name.stamp"
+  local -a stale=( $stamp(Nmh+$hours) )                    # zsh glob qualifier
+  [[ -e $stamp && ${#stale} -eq 0 ]] && return
+  mkdir -p ${stamp:h}
+  touch $stamp                                             # claim slot pre-fork
+  (
+    "$@" >"$HOME/.cache/$name.log" 2>&1
+    if (( $? == 0 )); then
+      rm -f "$HOME/.cache/$name.failed"
+    else
+      touch "$HOME/.cache/$name.failed"
+    fi
+  ) &!
+}
+
+if command -v chezmoi >/dev/null; then
+  _dotfiles_async 2 chezmoi-update chezmoi update
   () {
-    local stamp="$HOME/.cache/chezmoi-update.stamp"        # last-run marker
-    local -a stale=( $stamp(Nmh+12) )                      # non-empty if mtime > 12h
-    [[ -e $stamp && ${#stale} -eq 0 ]] && return           # fresh enough, skip
-    mkdir -p ${stamp:h}                                    # ensure cache dir
-    touch $stamp                                           # claim slot before fork
-    # Subshell exit detaches the child.
-    (chezmoi update >"$HOME/.cache/chezmoi-update.log" 2>&1 &)
+    local src; src="$(chezmoi source-path 2>/dev/null)" || return
+    local script="$src/tools/auto-update-tools"
+    [[ -x $script ]] && _dotfiles_async 24 tools-update "$script"
   }
 fi
+
+# Surface prior failures: one yellow notice per job with a paste-and-run
+# `clank "..."` line so a single select + Enter starts a diagnosis.
+() {
+  local job log
+  for job in ${_dotfiles_async_jobs[@]}; do
+    [[ -f $HOME/.cache/$job.failed ]] || continue
+    log="~/.cache/$job.log"
+    print -P "%F{yellow}[$job] last run had failures.%f Diagnose with:"
+    print "clank \"review $log, list every failure, and propose fix commands I can run by hand — do not change anything yourself\""
+  done
+}
 {{- end }}
 
 # -----------------------------------------------------------------------------

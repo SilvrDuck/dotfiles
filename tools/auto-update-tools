@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# auto-update-tools — best-effort daily refresh of installed tools.
+#
+# Invoked async from dot_zshrc.tmpl behind a 24h stamp file. Output is
+# captured by the caller; this script writes plain lines to stdout/stderr.
+# Exit code: 0 if everything that ran succeeded, 1 if any HARD failure
+# occurred. The caller uses that to decide whether to leave a .failed
+# sentinel that the next shell will surface.
+#
+# Hard failure  → real problem (network down, command crashed) → counts.
+# Soft skip     → expected (mise self-update under brew, no sudo cache,
+#                 omarchy machines) → does NOT count.
+#
+# Scope:
+#   - brew (macOS)          formulae + casks
+#   - mise                  self-update + upgrade managed runtimes
+#   - AI CLIs               claude, opencode, pi, uv (re-run upstream installers)
+#   - Linux system packages pacman/apt via sudo -n (skips silently w/o sudo cache)
+#
+# Omarchy: deliberately NOT auto-run. `omarchy update` is interactive and owns
+# its own cadence; we log a reminder instead so the user runs it themselves.
+
+set -u
+
+FAILED=0
+fail() { FAILED=1; echo "[$1] FAILED"; }
+skip() { echo "[$1] skipped: $2"; }
+
+echo "=== auto-update-tools $(date '+%Y-%m-%d %H:%M:%S') ==="
+
+# -----------------------------------------------------------------------------
+# Homebrew (macOS)
+# -----------------------------------------------------------------------------
+if command -v brew >/dev/null 2>&1; then
+  echo "[brew] update"
+  brew update --quiet           || fail brew-update
+  echo "[brew] upgrade (formulae)"
+  brew upgrade --quiet          || fail brew-upgrade
+  echo "[brew] upgrade (casks)"
+  brew upgrade --cask --quiet   || fail brew-cask-upgrade
+fi
+
+# -----------------------------------------------------------------------------
+# mise — self-update is a soft skip when mise was installed via brew (mise
+# refuses to self-update under a package manager). The actual `upgrade` of
+# managed runtimes is the part we care about and counts as a hard failure.
+# -----------------------------------------------------------------------------
+if command -v mise >/dev/null 2>&1; then
+  echo "[mise] self-update"
+  mise self-update -y           || skip mise-self-update "expected when mise is brew-installed"
+  echo "[mise] upgrade"
+  mise upgrade                  || fail mise-upgrade
+fi
+
+# -----------------------------------------------------------------------------
+# AI CLIs and uv — re-run idempotent upstream installers
+# -----------------------------------------------------------------------------
+if command -v claude >/dev/null 2>&1; then
+  echo "[claude] update"
+  curl -fsSL https://claude.ai/install.sh | bash || fail claude-update
+fi
+
+if command -v opencode >/dev/null 2>&1; then
+  echo "[opencode] update"
+  curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path || fail opencode-update
+fi
+
+if command -v pi >/dev/null 2>&1; then
+  echo "[pi] update"
+  if command -v mise >/dev/null 2>&1; then
+    mise x node@lts -- npm install -g @earendil-works/pi-coding-agent@latest || fail pi-update
+  elif command -v npm >/dev/null 2>&1; then
+    npm install -g @earendil-works/pi-coding-agent@latest || fail pi-update
+  fi
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  echo "[uv] self update"
+  uv self update                || fail uv-update
+fi
+
+# -----------------------------------------------------------------------------
+# Linux system packages
+# Omarchy: defer to `omarchy update` (interactive). pacman/apt via sudo -n.
+# -----------------------------------------------------------------------------
+if [ "$(uname -s)" = "Linux" ]; then
+  if [ -d "$HOME/.local/share/omarchy" ]; then
+    skip omarchy "run 'omarchy update' manually (interactive, owns its own cadence)"
+  elif command -v pacman >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      echo "[pacman] -Syu"
+      sudo -n pacman -Syu --noconfirm || fail pacman-upgrade
+      if command -v yay >/dev/null 2>&1; then
+        echo "[yay] -Syu"
+        yay -Syu --noconfirm        || fail yay-upgrade
+      fi
+    else
+      skip pacman "needs sudo (run 'sudo -v' once, then a new shell)"
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      echo "[apt] update + upgrade"
+      sudo -n apt-get update -y     || fail apt-update
+      sudo -n apt-get upgrade -y    || fail apt-upgrade
+    else
+      skip apt "needs sudo (run 'sudo -v' once, then a new shell)"
+    fi
+  fi
+fi
+
+echo "=== done $(date '+%Y-%m-%d %H:%M:%S') (exit=$FAILED) ==="
+exit $FAILED
