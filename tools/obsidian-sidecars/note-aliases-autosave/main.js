@@ -19,9 +19,11 @@
  *
  * The vault-create handler is registered inside `workspace.onLayoutReady`
  * so it doesn't fire for every existing file at startup (Obsidian replays
- * `vault.on('create')` for the whole vault on load), and the scan runs
- * only after the next `metadataCache.on('resolved')` so resolvedLinks is
- * up-to-date for the newly created file.
+ * `vault.on('create')` for the whole vault on load). The backfill itself
+ * is deferred until the new file's metadata settles — see
+ * `_scheduleBackfill` — so we don't race with concurrent on-create
+ * plugins (Templater, QuickAdd, …) that write the file shortly after
+ * its creation.
  *
  * Uses only stable obsidian exports — no @codemirror/view import.
  *
@@ -38,6 +40,16 @@ const {
 
 const WIKILINK_RE = /\[\[(?<target>[^[|#]*)(?:#[^[|]*)?\|(?<alias>[^\]]*)\]\]/gu;
 const DEBOUNCE_MS = 250;
+
+// After vault.on('create'), wait until the file's metadata has been quiet
+// for this long before backfilling. Long enough to outlast Templater's own
+// 300ms create-handler delay plus its template write.
+const BACKFILL_SETTLE_MS = 500;
+
+// Upper bound in case no metadataCache 'changed' event ever fires for the
+// new file (e.g. no template plugin, file stays empty).
+const BACKFILL_FALLBACK_MS = 3000;
+
 const LOG_TAG = '[note-aliases-autosave]';
 
 class NoteAliasesAutosavePlugin extends Plugin {
@@ -62,13 +74,43 @@ class NoteAliasesAutosavePlugin extends Plugin {
   }
 
   _scheduleBackfill(targetFile) {
-    const ref = this.app.metadataCache.on('resolved', () => {
-      this.app.metadataCache.offref(ref);
+    // Wait until the target file's metadata has settled before we touch its
+    // frontmatter. Concurrent on-create plugins (Templater, QuickAdd, …)
+    // typically write template content within the first few hundred ms after
+    // creation; firing earlier produces a write race that mangles YAML.
+    //
+    // Strategy: each metadataCache 'changed' event for the target resets a
+    // BACKFILL_SETTLE_MS debounce timer. A BACKFILL_FALLBACK_MS hard cap
+    // covers the case where no other plugin writes the file and 'changed'
+    // never fires.
+    let fired = false;
+    let settleTimer = null;
+    let fallbackTimer = null;
+    let changedRef = null;
+
+    const fire = () => {
+      if (fired) return;
+      fired = true;
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+      if (changedRef) this.app.metadataCache.offref(changedRef);
       this._backfillAliasesFromInboundLinks(targetFile).catch((err) =>
         console.error(LOG_TAG, err)
       );
+    };
+
+    changedRef = this.app.metadataCache.on('changed', (file) => {
+      if (file.path !== targetFile.path) return;
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      settleTimer = setTimeout(fire, BACKFILL_SETTLE_MS);
     });
-    this.registerEvent(ref);
+    this.registerEvent(changedRef);
+
+    fallbackTimer = setTimeout(fire, BACKFILL_FALLBACK_MS);
+    this.register(() => {
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      if (fallbackTimer !== null) clearTimeout(fallbackTimer);
+    });
   }
 
   async _handleChange(editor, info) {

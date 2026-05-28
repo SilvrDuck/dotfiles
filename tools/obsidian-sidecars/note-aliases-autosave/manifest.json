@@ -1,7 +1,7 @@
 {
   "id": "note-aliases-autosave",
   "name": "Note Aliases Auto-Save",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "minAppVersion": "1.0.0",
   "description": "Auto-save the alias from a freshly completed [[Target|Alias]] wikilink to the target note's frontmatter. Companion to pulsovi/obsidian-note-aliases — installed locally via chezmoi.",
   "author": "local",
