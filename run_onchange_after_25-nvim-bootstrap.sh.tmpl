@@ -13,5 +13,13 @@ if ! command -v nvim >/dev/null 2>&1; then
   exit 0
 fi
 
+# Heal a half-finished lazy.nvim clone (directory exists but has no lua/),
+# which leaves the loader unable to require("lazy") on every subsequent run.
+lazy_dir="${XDG_DATA_HOME:-$HOME/.local/share}/nvim/lazy/lazy.nvim"
+if [ -d "$lazy_dir" ] && [ ! -d "$lazy_dir/lua" ]; then
+  echo "[nvim] removing broken lazy.nvim half-clone at $lazy_dir"
+  rm -rf "$lazy_dir"
+fi
+
 echo "[nvim] headless plugin sync"
-nvim --headless "+Lazy! sync" +qa 2>/dev/null || echo "[nvim] sync skipped or failed"
+nvim --headless "+Lazy! sync" +qa || echo "[nvim] sync skipped or failed"
