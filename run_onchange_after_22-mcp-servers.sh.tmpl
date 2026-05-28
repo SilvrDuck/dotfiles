@@ -23,7 +23,7 @@ opencode_set() {
   args_json="$(printf '%s\n' "$@" | jq -R . | jq -s .)"
 
   mkdir -p "$(dirname "$cfg")"
-  [ -f "$cfg" ] || printf '{"$schema":"https://opencode.ai/config.json"}\n' >"$cfg"
+  [ -f "$cfg" ] || printf '{"$schema":"https://opencode.ai/config.json","autoupdate":false}\n' >"$cfg"
 
   local tmp
   tmp="$(mktemp)"
