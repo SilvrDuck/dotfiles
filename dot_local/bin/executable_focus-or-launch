@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Focus an existing window whose CLASS matches the pattern, else run the launch
+# command. Matches class ONLY, on purpose: omarchy-launch-or-focus also matches
+# window titles, so any window with the app name in its title (a terminal, a
+# browser tab) steals the keybinding instead of the real app (basecamp/omarchy#3669).
+#
+# Usage: focus-or-launch <class-pattern> <launch command...>
+
+set -uo pipefail
+
+if (($# < 2)); then
+  echo "Usage: focus-or-launch <class-pattern> <launch command...>" >&2
+  exit 1
+fi
+
+pattern="$1"
+shift
+
+address=$(hyprctl clients -j |
+  jq -r --arg p "$pattern" 'first(.[] | select(.class | test("\\b" + $p + "\\b"; "i")) | .address) // empty')
+
+if [[ -n $address ]]; then
+  hyprctl dispatch focuswindow "address:$address"
+else
+  exec setsid "$@"
+fi
