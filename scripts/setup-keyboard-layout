@@ -12,12 +12,17 @@ macOS:
     ~/Library/Keyboard Layouts
   (Upstream re-tags occasionally without assets; this picks the newest with one.)
 
+  Also installs a hidutil LaunchAgent that swaps the grave (`) and §/± keys,
+  fixing the Apple ISO position where the top-left key types § instead of `.
+
 Linux:
   Checks whether the EurKEY XKB layout is available.
   Prints the commands to apply it for X11/desktop environments.
 
-After macOS install, log out and back in, then add EurKEY Next in:
+After macOS install, log out and back in, then in:
   System Settings -> Keyboard -> Input Sources
+add "EurKEY Next" and remove any older EurKey entry (e.g. "EurKEY v2.0") —
+a stale entry masks the grave/§ swap if it gets reselected.
 HELP
   exit 0
 fi
@@ -70,15 +75,64 @@ case "$(uname -s)" in
       exit 1
     fi
 
+    # Remove any previously installed EurKey layouts (including the orphaned
+    # EurKey-macOS.bundle that ships "EurKEY v2.0") so only the freshly built
+    # EurKEY Next remains. A stale bundle otherwise lingers as a selectable
+    # input source, and the grave/§ swap does not surface on it — reselecting
+    # it by accident makes the fix look broken. -iname matches case-insensitively.
+    echo "[eurkey] Removing previously installed EurKey layouts"
+    find "$layout_dir" -maxdepth 1 -iname 'EurKey*.bundle' -exec rm -rf {} +
+
     echo "[eurkey] Installing bundle to $layout_dir"
-    rm -rf "$layout_dir/EurKEY-Next.bundle"
     cp -R "$bundle_path" "$layout_dir/"
 
     hdiutil detach "$mount_dir" -quiet || true
 
+    echo "[eurkey] Installing grave / § key swap (hidutil LaunchAgent)"
+
+    # Apple ISO keyboards emit the Grave/Tilde (0x35) and Non-US \ / § (0x64) HID
+    # usages in swapped positions: the top-left key types §, while the key next to
+    # left Shift types `. hidutil remaps the two usages below the keyboard layout,
+    # so EurKEY receives them the right way round regardless of the active layout.
+    # The mapping does not survive a reboot, hence a RunAtLoad LaunchAgent.
+    swap_label="local.eurkey.grave-section-swap"
+    swap_plist="$HOME/Library/LaunchAgents/$swap_label.plist"
+    swap_mapping='{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000035,"HIDKeyboardModifierMappingDst":0x700000064},{"HIDKeyboardModifierMappingSrc":0x700000064,"HIDKeyboardModifierMappingDst":0x700000035}]}'
+    mkdir -p "$HOME/Library/LaunchAgents"
+
+    cat > "$swap_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>$swap_label</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/hidutil</string>
+    <string>property</string>
+    <string>--set</string>
+    <string>$swap_mapping</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+</dict>
+</plist>
+PLIST
+
+    # bootstrap runs the agent immediately (RunAtLoad) and re-runs it at every
+    # login; bootout first so a re-run replaces any stale copy.
+    launchctl bootout "gui/$(id -u)/$swap_label" 2>/dev/null || true
+    if launchctl bootstrap "gui/$(id -u)" "$swap_plist" 2>/dev/null; then
+      echo "[eurkey] grave / § swap active now and at every login."
+    else
+      echo "[eurkey] Swap plist installed; applying once for this session."
+      /usr/bin/hidutil property --set "$swap_mapping" >/dev/null || true
+    fi
+
     cat <<DONE
 
-EurKEY Next $tag installed.
+EurKEY Next $tag installed; grave / § keys swapped.
 
 Now:
   1. Log out and back in, or restart.
