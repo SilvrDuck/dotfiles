@@ -11,10 +11,10 @@ automatically-unhide-macos-hidden-apps = true
 [gaps]
 inner.horizontal = 6
 inner.vertical = 6
-outer.left = 4
-outer.right = 4
-outer.top = 4
-outer.bottom = 4
+outer.left = 6
+outer.right = 6
+outer.top = 6
+outer.bottom = 6
 
 [mode.main.binding]
 
