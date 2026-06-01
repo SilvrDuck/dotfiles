@@ -294,7 +294,9 @@ typeset -ga _dotfiles_async_jobs
 
 # Usage: _dotfiles_async <interval-hours> <job-name> <cmd> [args...]
 # Output → ~/.cache/<name>.log. On non-zero exit, ~/.cache/<name>.failed is
-# left behind so the next shell can surface a diagnosis prompt.
+# left behind so the next shell can surface a diagnosis prompt. stdin is
+# /dev/null: a backgrounded job that reads the TTY gets SIGTTIN-stopped, and a
+# suspended job can strand a held lock (e.g. chezmoi's persistent-state lock).
 _dotfiles_async() {
   local hours="$1"; shift
   local name="$1"; shift
@@ -305,7 +307,7 @@ _dotfiles_async() {
   mkdir -p ${stamp:h}
   touch $stamp                                             # claim slot pre-fork
   (
-    "$@" >"$HOME/.cache/$name.log" 2>&1
+    "$@" </dev/null >"$HOME/.cache/$name.log" 2>&1
     if (( $? == 0 )); then
       rm -f "$HOME/.cache/$name.failed"
     else
