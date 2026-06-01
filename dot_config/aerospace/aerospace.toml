@@ -1,0 +1,73 @@
+# AeroSpace — i3-like tiling WM. Cmd acts as "Super" to mirror the Omarchy/hypr
+# muscle memory. Only non-default options are set; omitted keys keep AeroSpace
+# defaults. Validate edits with: aerospace reload-config --dry-run
+
+start-at-login = true
+
+# Cmd is the WM modifier, so keep a stray Cmd-H from hiding a tiled window out
+# from under the tiler (AeroSpace default for this is false).
+automatically-unhide-macos-hidden-apps = true
+
+[gaps]
+inner.horizontal = 8
+inner.vertical = 8
+outer.left = 8
+outer.right = 8
+outer.top = 8
+outer.bottom = 8
+
+[mode.main.binding]
+
+# Window management
+cmd-w = 'close'
+cmd-f = 'fullscreen'
+cmd-slash = 'layout tiles horizontal vertical'
+cmd-minus = 'resize smart -50'
+cmd-equal = 'resize smart +50'
+
+# Focus / move, vi-style — matches hypr bindings.conf (SUPER / SUPER+SHIFT H/J/K/L)
+cmd-h = 'focus left'
+cmd-j = 'focus down'
+cmd-k = 'focus up'
+cmd-l = 'focus right'
+cmd-shift-h = 'move left'
+cmd-shift-j = 'move down'
+cmd-shift-k = 'move up'
+cmd-shift-l = 'move right'
+
+# Workspaces 1-4 (switch; shift = move window there and follow)
+cmd-1 = 'workspace 1'
+cmd-2 = 'workspace 2'
+cmd-3 = 'workspace 3'
+cmd-4 = 'workspace 4'
+cmd-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
+cmd-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
+cmd-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
+cmd-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
+
+# App launchers — open -a is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
+# Browser is per-machine: Firefox default, Chrome secondary.
+cmd-enter = 'exec-and-forget open -n -a Ghostty'
+cmd-shift-enter = 'exec-and-forget open -a Firefox'
+cmd-shift-b = 'exec-and-forget open -a Firefox'
+cmd-shift-alt-b = 'exec-and-forget open -a "Google Chrome"'
+cmd-shift-o = 'exec-and-forget open -a Obsidian'
+cmd-shift-f = 'exec-and-forget open -a Finder'
+cmd-shift-t = 'exec-and-forget open -a "Activity Monitor"'
+cmd-shift-n = 'exec-and-forget open -n -a Ghostty --args -e nvim'
+
+# Web apps as chromeless Chrome PWA windows. The Chrome binary is invoked
+# directly because `open --args` is ignored when Chrome is already running.
+cmd-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
+cmd-shift-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://mail.google.com/mail/'''
+cmd-shift-c = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://calendar.google.com/calendar/u/0/r'''
+cmd-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
+
+# Service mode: reload config, flatten layout, toggle float, close others
+cmd-shift-semicolon = 'mode service'
+
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+f = ['layout floating tiling', 'mode main']
+backspace = ['close-all-windows-but-current', 'mode main']
