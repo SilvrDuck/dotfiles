@@ -281,7 +281,7 @@ clank() {
 }
 
 claude() { command claude --effort xhigh "$@"; }           # default xhigh; --effort wins
-command -v claude >/dev/null && alias cc='claude'          # short Claude
+command -v claude >/dev/null && alias cc='claude' ccc='claude --continue'
 
 # -----------------------------------------------------------------------------
 # Auto-updates — async, interval-gated, never blocks shell start
