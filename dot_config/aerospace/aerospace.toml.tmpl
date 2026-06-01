@@ -1,3 +1,7 @@
+{{- $primary := "Firefox" -}}
+{{- $secondary := "Google Chrome" -}}
+{{- if hasKey . "browser_primary"   }}{{ $primary   = .browser_primary   }}{{ end -}}
+{{- if hasKey . "browser_secondary" }}{{ $secondary = .browser_secondary }}{{ end -}}
 # AeroSpace — i3-like tiling WM. Cmd acts as "Super" to mirror the Omarchy/hypr
 # muscle memory. Only non-default options are set; omitted keys keep AeroSpace
 # defaults. Validate edits with: aerospace reload-config --dry-run
@@ -46,11 +50,12 @@ cmd-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
 cmd-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
 
 # App launchers — open -a is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
-# Browser is per-machine: Firefox default, Chrome secondary.
+# Primary/secondary browser are per-machine: defaults are Firefox / Chrome;
+# override browser_primary / browser_secondary in the local chezmoi [data].
 cmd-enter = 'exec-and-forget open -n -a Ghostty'
-cmd-shift-enter = 'exec-and-forget open -a Firefox'
-cmd-shift-b = 'exec-and-forget open -a Firefox'
-cmd-shift-alt-b = 'exec-and-forget open -a "Google Chrome"'
+cmd-shift-enter = 'exec-and-forget open -a "{{ $primary }}"'
+cmd-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
+cmd-shift-alt-b = 'exec-and-forget open -a "{{ $secondary }}"'
 cmd-shift-o = 'exec-and-forget open -a Obsidian'
 cmd-shift-f = 'exec-and-forget open -a Finder'
 cmd-shift-t = 'exec-and-forget open -a "Activity Monitor"'
