@@ -10,6 +10,13 @@
 # first call) this becomes a self-defeating busy-poll: it starves the very
 # async work it is waiting on -> infinite 100%-one-core livelock, frozen UI.
 #
+# True trigger (confirmed via a renderCharts stack dump): the *settings-search*
+# plugin indexes every plugin's settings on startup by calling each tab's
+# display(). SR's display() eagerly builds the StatisticsPage (Chart.js) ->
+# renderCharts() -> the loop, long before SR's own onLayoutReady sync() has
+# populated cardStats. Other plugins (omnisearch et al.) only tip the startup
+# race. None of our chezmoi patches are involved.
+#
 # Fix: pace the retry through setTimeout (yields to the macrotask queue so the
 # pending sync/metadata work can finish and set cardStats) and bound it so a
 # genuinely-never-ready state degrades to "no chart" instead of a freeze.
