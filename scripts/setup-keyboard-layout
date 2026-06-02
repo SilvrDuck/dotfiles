@@ -5,34 +5,49 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
   cat <<'HELP'
 setup-keyboard-layout
 
-One-time EurKEY keyboard setup.
+EurKEY keyboard setup. Idempotent: re-running is a no-op when everything is
+already current — the download is skipped and the keylayout swap detects that
+it is already applied.
 
 macOS:
   Installs the latest EurKEY Next release that ships a .dmg asset into:
     ~/Library/Keyboard Layouts
   (Upstream re-tags occasionally without assets; this picks the newest with one.)
+  The installed release tag is recorded next to the bundle so a later run that
+  finds the same tag skips the download entirely.
 
-  Also installs a hidutil LaunchAgent that swaps the grave (`) and §/± keys,
+  Removes any stale EurKEY bundle installed system-wide under
+  /Library/Keyboard Layouts (needs sudo) — a leftover system copy is what
+  doubles every EurKEY entry in the input-source picker.
+
+  Swaps the grave (`) and §/± keys directly inside the EurKEY Next keylayout,
   fixing the Apple ISO position where the top-left key types § instead of `.
+  This is done in the layout (key codes 10 and 50) rather than via hidutil:
+  recent macOS gates hidutil remapping of these keys behind an un-scriptable
+  Input Monitoring grant, whereas a layout edit needs no permission and
+  survives reboots on its own. Any hidutil swap daemon/agent a previous
+  version installed is torn down (the daemon removal needs sudo).
+
+After macOS install, log out and back in (or remove and re-add the input
+source so the patched layout reloads), then in:
+  System Settings -> Keyboard -> Input Sources
+add "EurKEY Next" and remove any older EurKey entry (e.g. "EurKEY v2.0").
 
 Linux:
   Checks whether the EurKEY XKB layout is available.
   Prints the commands to apply it for X11/desktop environments.
-
-After macOS install, log out and back in, then in:
-  System Settings -> Keyboard -> Input Sources
-add "EurKEY Next" and remove any older EurKey entry (e.g. "EurKEY v2.0") —
-a stale entry masks the grave/§ swap if it gets reselected.
 HELP
   exit 0
 fi
 
 case "$(uname -s)" in
   Darwin)
-    if ! command -v jq >/dev/null 2>&1; then
-      echo "jq is required. Run chezmoi apply first so packages are installed."
-      exit 1
-    fi
+    for tool in jq python3; do
+      if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "$tool is required. Run chezmoi apply first so packages are installed."
+        exit 1
+      fi
+    done
 
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
@@ -54,90 +69,144 @@ case "$(uname -s)" in
       exit 1
     fi
 
-    echo "[eurkey] Using release $tag"
-
-    echo "[eurkey] Downloading $dmg_url"
-    curl -fL "$dmg_url" -o "$tmpdir/EurKEY-Next.dmg"
-
-    echo "[eurkey] Mounting DMG"
-    mount_dir="$tmpdir/mnt"
-    mkdir -p "$mount_dir"
-    hdiutil attach "$tmpdir/EurKEY-Next.dmg" -mountpoint "$mount_dir" -nobrowse -quiet
-
     layout_dir="$HOME/Library/Keyboard Layouts"
     mkdir -p "$layout_dir"
 
-    bundle_path="$(find "$mount_dir" -name 'EurKEY-Next.bundle' -maxdepth 3 -print -quit)"
+    # The bundle name carries no version, so the installed release tag is
+    # recorded alongside it. A run that sees the same tag (and the bundle still
+    # present) skips the multi-megabyte download, mount, and copy.
+    marker="$layout_dir/.EurKEY-Next.tag"
+    installed_tag=""
+    [[ -f "$marker" ]] && installed_tag="$(cat "$marker")"
 
-    if [[ -z "$bundle_path" ]]; then
-      hdiutil detach "$mount_dir" -quiet || true
-      echo "Could not find EurKEY-Next.bundle inside the DMG."
-      exit 1
-    fi
-
-    # Remove any previously installed EurKey layouts (including the orphaned
-    # EurKey-macOS.bundle that ships "EurKEY v2.0") so only the freshly built
-    # EurKEY Next remains. A stale bundle otherwise lingers as a selectable
-    # input source, and the grave/§ swap does not surface on it — reselecting
-    # it by accident makes the fix look broken. -iname matches case-insensitively.
-    echo "[eurkey] Removing previously installed EurKey layouts"
-    find "$layout_dir" -maxdepth 1 -iname 'EurKey*.bundle' -exec rm -rf {} +
-
-    echo "[eurkey] Installing bundle to $layout_dir"
-    cp -R "$bundle_path" "$layout_dir/"
-
-    hdiutil detach "$mount_dir" -quiet || true
-
-    echo "[eurkey] Installing grave / § key swap (hidutil LaunchAgent)"
-
-    # Apple ISO keyboards emit the Grave/Tilde (0x35) and Non-US \ / § (0x64) HID
-    # usages in swapped positions: the top-left key types §, while the key next to
-    # left Shift types `. hidutil remaps the two usages below the keyboard layout,
-    # so EurKEY receives them the right way round regardless of the active layout.
-    # The mapping does not survive a reboot, hence a RunAtLoad LaunchAgent.
-    swap_label="local.eurkey.grave-section-swap"
-    swap_plist="$HOME/Library/LaunchAgents/$swap_label.plist"
-    swap_mapping='{"UserKeyMapping":[{"HIDKeyboardModifierMappingSrc":0x700000035,"HIDKeyboardModifierMappingDst":0x700000064},{"HIDKeyboardModifierMappingSrc":0x700000064,"HIDKeyboardModifierMappingDst":0x700000035}]}'
-    mkdir -p "$HOME/Library/LaunchAgents"
-
-    cat > "$swap_plist" <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>$swap_label</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/hidutil</string>
-    <string>property</string>
-    <string>--set</string>
-    <string>$swap_mapping</string>
-  </array>
-  <key>RunAtLoad</key>
-  <true/>
-</dict>
-</plist>
-PLIST
-
-    # bootstrap runs the agent immediately (RunAtLoad) and re-runs it at every
-    # login; bootout first so a re-run replaces any stale copy.
-    launchctl bootout "gui/$(id -u)/$swap_label" 2>/dev/null || true
-    if launchctl bootstrap "gui/$(id -u)" "$swap_plist" 2>/dev/null; then
-      echo "[eurkey] grave / § swap active now and at every login."
+    if [[ -d "$layout_dir/EurKEY-Next.bundle" && "$installed_tag" == "$tag" ]]; then
+      echo "[eurkey] EurKEY Next $tag already installed; skipping download."
     else
-      echo "[eurkey] Swap plist installed; applying once for this session."
-      /usr/bin/hidutil property --set "$swap_mapping" >/dev/null || true
+      echo "[eurkey] Installing EurKEY Next $tag"
+      echo "[eurkey] Downloading $dmg_url"
+      curl -fL "$dmg_url" -o "$tmpdir/EurKEY-Next.dmg"
+
+      echo "[eurkey] Mounting DMG"
+      mount_dir="$tmpdir/mnt"
+      mkdir -p "$mount_dir"
+      hdiutil attach "$tmpdir/EurKEY-Next.dmg" -mountpoint "$mount_dir" -nobrowse -quiet
+
+      bundle_path="$(find "$mount_dir" -name 'EurKEY-Next.bundle' -maxdepth 3 -print -quit)"
+
+      if [[ -z "$bundle_path" ]]; then
+        hdiutil detach "$mount_dir" -quiet || true
+        echo "Could not find EurKEY-Next.bundle inside the DMG."
+        exit 1
+      fi
+
+      # Remove any previously installed EurKey layouts (including the orphaned
+      # EurKey-macOS.bundle that ships "EurKEY v2.0") so only the freshly built
+      # EurKEY Next remains. A stale bundle otherwise lingers as a selectable
+      # input source. -iname matches case-insensitively.
+      echo "[eurkey] Removing previously installed EurKey layouts"
+      find "$layout_dir" -maxdepth 1 -iname 'EurKey*.bundle' -exec rm -rf {} +
+
+      echo "[eurkey] Installing bundle to $layout_dir"
+      cp -R "$bundle_path" "$layout_dir/"
+
+      hdiutil detach "$mount_dir" -quiet || true
+      printf '%s\n' "$tag" > "$marker"
     fi
+
+    # Swap the grave (`) and §/± keys inside the layout. Apple ISO keyboards put
+    # § on the top-left key (virtual code 10, kVK_ISO_Section) and ` on the key
+    # next to left Shift (code 50, kVK_ANSI_Grave). Swapping the two codes across
+    # every keymap moves ` to the top-left where it belongs. The patch is
+    # idempotent: it bails if the layout is already swapped.
+    keylayout="$layout_dir/EurKEY-Next.bundle/Contents/Resources/EurKEY Next.keylayout"
+    swap_py="$tmpdir/swap-keylayout.py"
+    cat > "$swap_py" <<'PYEOF'
+import re
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as fh:
+    text = fh.read()
+
+# Base-keymap sentinels: top-left key (code 10) is § when original, ` when
+# already swapped. Used to keep the patch idempotent.
+original = '<key code="10" output="§"/>'
+swapped = '<key code="10" output="`"/>'
+
+if swapped in text and original not in text:
+    print("already swapped")
+    sys.exit(0)
+if original not in text:
+    print("unexpected layout (sentinel not found)")
+    sys.exit(2)
+
+key = re.compile(r'<key code="(10|50)"((?:\s+[\w-]+="[^"]*")*)\s*/>')
+tens = []
+fifties = []
+for m in key.finditer(text):
+    (tens if m.group(1) == "10" else fifties).append(m)
+
+if len(tens) != len(fifties) or not tens:
+    print("unbalanced key codes (%d code-10, %d code-50)" % (len(tens), len(fifties)))
+    sys.exit(2)
+
+# Each i-th code-10 and code-50 sit in the same keymap (they alternate).
+# Build the swapped lines, then apply from the end so offsets stay valid.
+edits = []
+for ten, fifty in zip(tens, fifties):
+    edits.append((ten.start(), ten.end(), '<key code="10"' + fifty.group(2) + '/>'))
+    edits.append((fifty.start(), fifty.end(), '<key code="50"' + ten.group(2) + '/>'))
+for start, end, new in sorted(edits, reverse=True):
+    text = text[:start] + new + text[end:]
+
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(text)
+print("swapped %d key pair(s)" % len(tens))
+PYEOF
+
+    if [[ ! -f "$keylayout" ]]; then
+      echo "[eurkey] WARNING: 'EurKEY Next.keylayout' not found; cannot apply grave/§ swap."
+    elif swap_result="$(python3 "$swap_py" "$keylayout")"; then
+      echo "[eurkey] keylayout grave/§ swap: $swap_result"
+    else
+      echo "[eurkey] WARNING: keylayout swap not applied ($swap_result)."
+    fi
+
+    # An older EurKEY copy installed system-wide doubles every picker entry
+    # (the per-user and system layouts both list). Remove it so only the
+    # per-user bundle remains. Skipped — and so sudo-free — when already gone.
+    if [[ -n "$(find "/Library/Keyboard Layouts" -maxdepth 1 -iname 'EurKey*.bundle' -print -quit 2>/dev/null)" ]]; then
+      echo "[eurkey] Removing stale system-wide EurKEY layout (needs sudo)"
+      sudo find "/Library/Keyboard Layouts" -maxdepth 1 -iname 'EurKey*.bundle' -exec rm -rf {} +
+    fi
+
+    # Earlier versions swapped the keys with a hidutil LaunchDaemon/LaunchAgent.
+    # The keylayout edit replaces it, so tear any leftover job down and clear a
+    # live mapping it may have set.
+    swap_label="local.eurkey.grave-section-swap"
+    daemon_plist="/Library/LaunchDaemons/$swap_label.plist"
+    agent_plist="$HOME/Library/LaunchAgents/$swap_label.plist"
+    if [[ -f "$daemon_plist" ]]; then
+      echo "[eurkey] Removing obsolete hidutil swap LaunchDaemon (needs sudo)"
+      sudo launchctl bootout "system/$swap_label" 2>/dev/null || true
+      sudo rm -f "$daemon_plist"
+    fi
+    if [[ -f "$agent_plist" ]]; then
+      echo "[eurkey] Removing obsolete hidutil swap LaunchAgent"
+      launchctl bootout "gui/$(id -u)/$swap_label" 2>/dev/null || true
+      rm -f "$agent_plist"
+    fi
+    /usr/bin/hidutil property --set '{"UserKeyMapping":[]}' >/dev/null 2>&1 || true
 
     cat <<DONE
 
-EurKEY Next $tag installed; grave / § keys swapped.
+EurKEY Next $tag ready; grave / § swapped inside the layout.
 
 Now:
-  1. Log out and back in, or restart.
-  2. Open System Settings -> Keyboard -> Input Sources.
-  3. Add "EurKEY Next".
+  1. Open System Settings -> Keyboard -> Input Sources.
+  2. Add "EurKEY Next" (remove any older EurKey entry).
+  3. If "EurKEY Next" was already added, remove and re-add it — or log out and
+     back in — so the patched layout reloads.
 
 DONE
     ;;
