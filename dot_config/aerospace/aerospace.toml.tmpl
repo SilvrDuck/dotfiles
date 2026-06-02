@@ -2,14 +2,17 @@
 {{- $secondary := "Google Chrome" -}}
 {{- if hasKey . "browser_primary"   }}{{ $primary   = .browser_primary   }}{{ end -}}
 {{- if hasKey . "browser_secondary" }}{{ $secondary = .browser_secondary }}{{ end -}}
-# AeroSpace — i3-like tiling WM. Cmd acts as "Super" to mirror the Omarchy/hypr
-# muscle memory. Only non-default options are set; omitted keys keep AeroSpace
-# defaults. Validate edits with: aerospace reload-config --dry-run
+# AeroSpace — i3-like tiling WM. Alt acts as "Super" to mirror the Omarchy/hypr
+# muscle memory; it is also AeroSpace's own default modifier and, unlike Cmd,
+# carries no native macOS shortcuts to clash with. Only non-default options are
+# set; omitted keys keep AeroSpace defaults. Tab is left unbound so AltTab keeps
+# ⌥Tab. Validate edits with: aerospace reload-config --dry-run
 
 start-at-login = true
 
-# Cmd is the WM modifier, so keep a stray Cmd-H from hiding a tiled window out
-# from under the tiler (AeroSpace default for this is false).
+# Native ⌘H hides an app, which yanks its window out of the tiler and leaves a
+# hole in the layout; auto-unhiding pulls it back so tiling stays consistent
+# (AeroSpace default for this is false).
 automatically-unhide-macos-hidden-apps = true
 
 [gaps]
@@ -23,53 +26,53 @@ outer.bottom = 6
 [mode.main.binding]
 
 # Window management
-cmd-w = 'close'
-cmd-f = 'fullscreen'
-cmd-slash = 'layout tiles horizontal vertical'
-cmd-minus = 'resize smart -50'
-cmd-equal = 'resize smart +50'
+alt-w = 'close'
+alt-f = 'fullscreen'
+alt-slash = 'layout tiles horizontal vertical'
+alt-minus = 'resize smart -50'
+alt-equal = 'resize smart +50'
 
 # Focus / move, vi-style — matches hypr bindings.conf (SUPER / SUPER+SHIFT H/J/K/L)
-cmd-h = 'focus left'
-cmd-j = 'focus down'
-cmd-k = 'focus up'
-cmd-l = 'focus right'
-cmd-shift-h = 'move left'
-cmd-shift-j = 'move down'
-cmd-shift-k = 'move up'
-cmd-shift-l = 'move right'
+alt-h = 'focus left'
+alt-j = 'focus down'
+alt-k = 'focus up'
+alt-l = 'focus right'
+alt-shift-h = 'move left'
+alt-shift-j = 'move down'
+alt-shift-k = 'move up'
+alt-shift-l = 'move right'
 
 # Workspaces 1-4 (switch; shift = move window there and follow)
-cmd-1 = 'workspace 1'
-cmd-2 = 'workspace 2'
-cmd-3 = 'workspace 3'
-cmd-4 = 'workspace 4'
-cmd-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
-cmd-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
-cmd-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
-cmd-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
+alt-1 = 'workspace 1'
+alt-2 = 'workspace 2'
+alt-3 = 'workspace 3'
+alt-4 = 'workspace 4'
+alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
+alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
+alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
+alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
 
 # App launchers — open -a is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
 # Primary/secondary browser are per-machine: defaults are Firefox / Chrome;
 # override browser_primary / browser_secondary in the local chezmoi [data].
-cmd-enter = 'exec-and-forget open -n -a Ghostty'
-cmd-shift-enter = 'exec-and-forget open -a "{{ $primary }}"'
-cmd-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
-cmd-shift-alt-b = 'exec-and-forget open -a "{{ $secondary }}"'
-cmd-shift-o = 'exec-and-forget open -a Obsidian'
-cmd-shift-f = 'exec-and-forget open -a Finder'
-cmd-shift-t = 'exec-and-forget open -a "Activity Monitor"'
-cmd-shift-n = 'exec-and-forget open -n -a Ghostty --args -e nvim'
+alt-enter = 'exec-and-forget open -n -a Ghostty'
+alt-shift-enter = 'exec-and-forget open -a "{{ $primary }}"'
+alt-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
+alt-shift-cmd-b = 'exec-and-forget open -a "{{ $secondary }}"'
+alt-shift-o = 'exec-and-forget open -a Obsidian'
+alt-shift-f = 'exec-and-forget open -a Finder'
+alt-shift-t = 'exec-and-forget open -a "Activity Monitor"'
+alt-shift-n = 'exec-and-forget open -n -a Ghostty --args -e nvim'
 
 # Web apps as chromeless Chrome PWA windows. The Chrome binary is invoked
 # directly because `open --args` is ignored when Chrome is already running.
-cmd-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
-cmd-shift-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://mail.google.com/mail/'''
-cmd-shift-c = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://calendar.google.com/calendar/u/0/r'''
-cmd-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
+alt-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
+alt-shift-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://mail.google.com/mail/'''
+alt-shift-c = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://calendar.google.com/calendar/u/0/r'''
+alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
 
 # Service mode: reload config, flatten layout, toggle float, close others
-cmd-shift-semicolon = 'mode service'
+alt-shift-semicolon = 'mode service'
 
 [mode.service.binding]
 esc = ['reload-config', 'mode main']
