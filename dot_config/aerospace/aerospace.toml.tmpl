@@ -53,17 +53,25 @@ alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
 alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
 alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
 
+# New terminal window in the *existing* Ghostty instance, via Ghostty 1.3+
+# native AppleScript. `open -n -a Ghostty` was wrong: -n spawns a second app
+# instance (extra dock icon), and macOS state restoration rebuilt the old
+# split layout inside it. `new window` reuses the running app, fresh window.
+alt-enter = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window' '''
+
 # App launchers — open -a is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
 # Primary/secondary browser are per-machine: defaults are Firefox / Chrome;
 # override browser_primary / browser_secondary in the local chezmoi [data].
-alt-enter = 'exec-and-forget open -n -a Ghostty'
 alt-shift-enter = 'exec-and-forget open -a "{{ $primary }}"'
 alt-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
 alt-shift-cmd-b = 'exec-and-forget open -a "{{ $secondary }}"'
 alt-shift-o = 'exec-and-forget open -a Obsidian'
 alt-shift-f = 'exec-and-forget open -a Finder'
 alt-shift-t = 'exec-and-forget open -a "Activity Monitor"'
-alt-shift-n = 'exec-and-forget open -n -a Ghostty --args -e nvim'
+
+# Like alt-enter but opens the fresh Ghostty window straight into nvim. Same
+# reason for AppleScript over `open -n`: reuse the instance, skip restoration.
+alt-shift-n = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"nvim"}' '''
 
 # Web apps as chromeless Chrome PWA windows. The Chrome binary is invoked
 # directly because `open --args` is ignored when Chrome is already running.
