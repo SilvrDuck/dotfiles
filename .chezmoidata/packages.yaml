@@ -49,6 +49,7 @@ packages:
       - lazydocker
       - aerospace
       - alt-tab
+      - borders
 
     nvim:
       - neovim
@@ -143,3 +144,8 @@ packages:
     alt-tab:
       darwin_kind: cask
       # macOS-only window switcher; install_pacman / install_apt fail-skip on Linux.
+
+    borders:
+      darwin: FelixKratz/formulae/borders
+      # macOS-only focus-border daemon (JankyBorders) for AeroSpace;
+      # install_pacman / install_apt fail-skip on Linux.
