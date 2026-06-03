@@ -96,7 +96,7 @@ macOS only. The `fleet` Raycast script command ships in `~/.local/share/raycast-
 2. Bind the *Fleet* command to ⌃⌥⌘ Space
 3. Set the launcher hotkey to ⌘ Space (accept Raycast's offer to free it from Spotlight)
 
-## Tiling (AeroSpace + AltTab + AutoRaise)
+## macOS manual setups
 
 macOS only. AeroSpace tiles windows with ⌥ as the "Super" key; AltTab switches windows; AutoRaise: focus-follows-mouse.
 
@@ -104,6 +104,7 @@ macOS only. AeroSpace tiles windows with ⌥ as the "Super" key; AltTab switches
 2. Launch AltTab → grant **Accessibility** + **Screen Recording**. Default trigger is ⌥ Tab (Omarchy's Alt+Tab).
 3. Launch AutoRaise → grant **Accessibility**. Settings: uncheck *Require mouse to stop moving before raise/focus*; *Poll interval* → 20.
 4. Keymap lives in `~/.config/aerospace/aerospace.toml`; app launchers are ⌥⇧ + letter, and ⌥⇧; enters service mode (Esc reloads the config).
+5. Launch Ice → enable launch-at-login. Its menu bar layout is per-machine, not synced.
 
 ## Guides
 
