@@ -9,6 +9,13 @@
 #
 # Usage: launch-or-focus-webapp <title-pattern> <url>
 
+# AeroSpace's exec-and-forget runs us under the minimal launchd PATH
+# (/usr/bin:/bin:…), which omits the dirs where the `aerospace` CLI lives — so
+# list-windows/focus silently fail and we always fall through to launch.
+# Restore the likely locations (fork: ~/.local/bin; cask: Homebrew) so the CLI
+# resolves when invoked from a keybinding, not just an interactive shell.
+PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 pattern="$1"
 url="$2"
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
