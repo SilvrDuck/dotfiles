@@ -37,6 +37,7 @@ packages:
       - d2
       - plantuml
       - sbb-tui
+      - engram
 
     desktop:
       - ghostty
@@ -56,6 +57,7 @@ packages:
       - borders
       - autoraise
       - nwg-displays
+      - im-select
 
     nvim:
       - neovim
@@ -145,6 +147,11 @@ packages:
       darwin: necrom4/tap/sbb-tui
       pacman_aur: sbb-tui
 
+    engram:
+      # Persistent memory for AI coding agents.
+      darwin: gentleman-programming/tap/engram
+      linux_skip: true
+
     # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
     # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
     # aerospace:
@@ -153,6 +160,11 @@ packages:
 
     alt-tab:
       darwin_kind: cask
+
+    im-select:
+      # Input-source switcher CLI.
+      darwin: daipeihust/tap/im-select
+      linux_skip: true
 
     borders:
       darwin: FelixKratz/formulae/borders

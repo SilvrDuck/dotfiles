@@ -5,9 +5,23 @@ install_brew() {
   local kind="$1"
   local name="$2"
 
+  # Third-party tap packages (user/tap/name) are trusted as part of install.
+  # Untrusted taps only warn today, but Homebrew 6.0 will ignore them
+  # outright -- silently breaking these installs.
+  case "$name" in
+    */*)
+      if [ "$kind" = "cask" ]; then
+        brew trust --cask "$name" || echo "[brew trust] skipped or failed: $name"
+      else
+        brew trust --formula "$name" || echo "[brew trust] skipped or failed: $name"
+      fi
+      ;;
+  esac
+
   if [ "$kind" = "cask" ]; then
     echo "[brew cask] $name"
-    brew install --cask "$name" || echo "[brew cask] skipped or failed: $name"
+    # --adopt claims a pre-existing app (installed by hand) instead of erroring.
+    brew install --cask --adopt "$name" || echo "[brew cask] skipped or failed: $name"
   else
     echo "[brew] $name"
     brew install "$name" || echo "[brew] skipped or failed: $name"

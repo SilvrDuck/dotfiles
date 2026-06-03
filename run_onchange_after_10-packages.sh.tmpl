@@ -52,14 +52,18 @@ if command -v pacman >/dev/null 2>&1; then
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $aur := "" }}
+{{ $skip := false }}
 {{ with (index $.packages.overrides $tool) }}
 {{ with (index . "pacman") }}{{ $name = . }}{{ end }}
 {{ with (index . "pacman_aur") }}{{ $aur = . }}{{ end }}
+{{ with (index . "linux_skip") }}{{ $skip = . }}{{ end }}
 {{ end }}
+{{ if not $skip }}
 {{ if $aur }}
   install_yay {{ $aur | quote }}
 {{ else }}
   install_pacman {{ $name | quote }}
+{{ end }}
 {{ end }}
 {{ end }}
 
@@ -71,10 +75,13 @@ elif command -v apt-get >/dev/null 2>&1; then
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $manual := "" }}
+{{ $skip := false }}
 {{ with (index $.packages.overrides $tool) }}
 {{ with (index . "apt") }}{{ $name = . }}{{ end }}
 {{ with (index . "apt_manual") }}{{ $manual = . }}{{ end }}
+{{ with (index . "linux_skip") }}{{ $skip = . }}{{ end }}
 {{ end }}
+{{ if not $skip }}
 {{ if eq $manual "antidote_git" }}
   install_manual_antidote
 {{ else if eq $manual "neovim_tarball" }}
@@ -99,6 +106,7 @@ elif command -v apt-get >/dev/null 2>&1; then
   install_manual_jetbrains_mono_nerd
 {{ else }}
   install_apt {{ $name | quote }}
+{{ end }}
 {{ end }}
 {{ end }}
 
