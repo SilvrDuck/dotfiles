@@ -128,13 +128,15 @@ alt-shift-f = '''exec-and-forget osascript -e 'tell application "Finder" to make
 # reason for AppleScript over `open -n`: reuse the instance, skip restoration.
 alt-shift-n = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"nvim"}' '''
 
-# Web apps as chromeless Chrome --app windows. The Chrome binary is invoked
+# Web apps as chromeless Chrome --app windows. Gmail and Calendar launch-or-
+# focus: focus an existing window by a page-<title> substring (launch-or-focus-
+# webapp, our AeroSpace port of omarchy-launch-or-focus-webapp), else launch.
+# Patterns stay stable across views/branding — Gmail matches "Mail" (a Workspace
+# tab is titled "<org> Mail", never "Gmail"); Calendar matches "Calendar". ChatGPT
+# and YouTube intentionally open a fresh window each press, via the Chrome binary
 # directly because `open --args` is ignored when Chrome is already running.
-# Gmail and Calendar focus an existing window (launch-or-focus-webapp, an
-# AeroSpace port of omarchy-launch-or-focus-webapp) instead of stacking a new
-# one each press; ChatGPT and YouTube just launch fresh.
 alt-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
-alt-shift-e = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Gmail https://mail.google.com/mail/'
+alt-shift-e = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Mail https://mail.google.com/mail/'
 alt-shift-c = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Calendar https://calendar.google.com/calendar/u/0/r'
 alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
 
