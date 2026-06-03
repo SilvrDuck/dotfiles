@@ -55,6 +55,7 @@ packages:
       - alt-tab
       - borders
       - autoraise
+      - nwg-displays
 
     nvim:
       - neovim
@@ -161,3 +162,7 @@ packages:
       darwin: dimentium/autoraise/autoraiseapp
       darwin_kind: cask
       # AutoRaise — focus-follows-mouse for AeroSpace (no native equivalent).
+
+    nwg-displays:
+      # Wayland (sway/Hyprland) display GUI — no macOS build.
+      darwin_skip: true
