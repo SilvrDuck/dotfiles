@@ -50,6 +50,15 @@ outer.bottom = 6
 5 = 'built-in'
 6 = 'built-in'
 
+# Workspaces occasionally initialize to the accordion (stacked) layout despite
+# the 'tiles' default — upstream bug nikitabobko/AeroSpace#905. Rather than
+# re-tile by hand with alt-/ each time, force 'tiles' on every detected window:
+# a no-op when the container is already tiled, biting only when the stray
+# accordion would appear. Trade-off: deliberate accordion is now unreachable,
+# which costs nothing here since no key binds it.
+[[on-window-detected]]
+run = ['layout tiles']
+
 [mode.main.binding]
 
 # Window management. Fullscreen is on alt-semicolon, not alt-f — bare alt-f is
