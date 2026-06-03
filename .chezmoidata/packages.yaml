@@ -47,7 +47,9 @@ packages:
       - docker
       - docker-compose
       - lazydocker
-      - aerospace
+      # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
+      # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
+      # - aerospace
       - alt-tab
       - borders
 
@@ -136,10 +138,12 @@ packages:
       pacman_aur: sbb-tui
       # No upstream .deb; install_apt will fail-skip on apt-based boxes.
 
-    aerospace:
-      darwin: nikitabobko/tap/aerospace
-      darwin_kind: cask
-      # macOS-only tiling WM; install_pacman / install_apt fail-skip on Linux.
+    # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
+    # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
+    # aerospace:
+    #   darwin: nikitabobko/tap/aerospace
+    #   darwin_kind: cask
+    #   # macOS-only tiling WM; install_pacman / install_apt fail-skip on Linux.
 
     alt-tab:
       darwin_kind: cask

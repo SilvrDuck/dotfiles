@@ -1,0 +1,46 @@
+# AEROSPACE-FORK #1618 — TEMPORARY. Runs tymscar's AeroSpace fork build, which adds
+# i3-style Cmd+right-click drag-resize (upstream PR #1618, not yet merged). This
+# replaces the Homebrew cask (commented out in .chezmoidata/packages.yaml under the
+# same tag) for as long as the PR is pending. The .app cannot live in /Applications
+# (outside $HOME, chezmoi can't write it) so it goes to ~/Applications.
+#
+# WHEN PR #1618 MERGES — restore the clean brew state, in order:
+#   1. Delete this file.
+#   2. packages.yaml: un-comment the two AEROSPACE-FORK #1618 blocks (the
+#      `- aerospace` group entry and the `aerospace:` override); delete the tags.
+#   3. .chezmoiremove.tmpl: add (temporarily) under an is_mac guard:
+#         Applications/AeroSpace.app
+#         .local/bin/aerospace
+#   4. Hand the user (cannot run in-session):
+#         !brew install --cask nikitabobko/tap/aerospace
+#         !chezmoi apply -v
+#      then re-grant Accessibility to /Applications/AeroSpace.app on first launch.
+#   5. After that apply deletes the fork app+CLI, remove the two .chezmoiremove lines.
+#   6. Verify: `which aerospace` -> /opt/homebrew/bin/aerospace, and only one
+#      AeroSpace.app on disk.
+{{ if .is_mac -}}
+{{ $ver := "0.21.1" -}}
+{{ $url := printf "https://github.com/tymscar/AeroSpace/releases/download/v%s/AeroSpace-v%s.zip" $ver $ver -}}
+
+# GUI app bundle -> ~/Applications. `include` isolates just the .app subtree so the
+# bundle isn't polluted by the zip's bin/ manpage/ shell-completion/ siblings; `exact`
+# prunes stale files on a version bump; stripComponents drops the two leading dirs.
+["Applications/AeroSpace.app"]
+    type = "archive"
+    url = {{ $url | quote }}
+    checksum.sha256 = "dd647795583e2438850eff83012ec81e944b69e4cbaca5d07057ef4da3987562"
+    exact = true
+    stripComponents = 2
+    include = ["AeroSpace-v{{ $ver }}/AeroSpace.app/**"]
+    refreshPeriod = "168h"
+
+# CLI -> ~/.local/bin (first on PATH, shadows /opt/homebrew/bin/aerospace).
+# executable forces +x; single-file extraction from the same cached zip.
+[".local/bin/aerospace"]
+    type = "archive-file"
+    url = {{ $url | quote }}
+    checksum.sha256 = "dd647795583e2438850eff83012ec81e944b69e4cbaca5d07057ef4da3987562"
+    path = "AeroSpace-v{{ $ver }}/bin/aerospace"
+    executable = true
+    refreshPeriod = "168h"
+{{ end -}}

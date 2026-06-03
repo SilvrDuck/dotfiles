@@ -2,3 +2,10 @@ title = "dotfiles gitleaks config"
 
 [extend]
 useDefault = true
+
+# 'stripComponents' is a chezmoi external (archive) keyword used in
+# .chezmoiexternals/. Its inner letters trip a machine-local substring rule,
+# but it is a config key, not a secret — exempt any line containing it.
+[allowlist]
+regexTarget = "line"
+regexes = ['''stripComponents''']
