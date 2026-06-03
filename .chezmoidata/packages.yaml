@@ -58,6 +58,7 @@ packages:
       - autoraise
       - nwg-displays
       - im-select
+      - jordanbaird-ice
 
     nvim:
       - neovim
@@ -178,3 +179,8 @@ packages:
     nwg-displays:
       # Wayland (sway/Hyprland) display GUI — no macOS build.
       darwin_skip: true
+
+    jordanbaird-ice:
+      # Ice — menu bar manager (macOS only).
+      darwin_kind: cask
+      linux_skip: true
