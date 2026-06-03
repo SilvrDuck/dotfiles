@@ -20,6 +20,13 @@ automatically-unhide-macos-hidden-apps = true
 # The gradient is double-quoted so bash does not read its parens as a subshell.
 after-startup-command = ['exec-and-forget borders active_color="gradient(top_left=0xff84b0c8,bottom_right=0xffeceff4)" inactive_color=0x00000000 width=5.0 style=round hidpi=on']
 
+# Cursor lazily follows keyboard focus: focusing a window (alt-h/j/k/l, workspace
+# switch) warps the pointer to it unless already inside it — mirrors Omarchy's
+# default cursor warp on keybind focus (hypr cursor.no_warps=false). 'lazy' skips
+# needless jumps. macOS has no focus-follows-mouse counterpart to hypr's
+# follow_mouse=1, so this is the one direction that ports. Default is [].
+on-focus-changed = ['move-mouse window-lazy-center']
+
 [gaps]
 inner.horizontal = 6
 inner.vertical = 6
