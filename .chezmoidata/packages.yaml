@@ -43,6 +43,7 @@ packages:
       - font-jetbrains-mono-nerd-font
       - obsidian
       - raycast
+      - visual-studio-code
       - kanban-md
       - docker
       - docker-compose
@@ -120,6 +121,11 @@ packages:
     raycast:
       darwin_kind: cask
       # macOS-only; install_pacman / install_apt will fail-skip on Linux.
+
+    visual-studio-code:
+      darwin_kind: cask
+      pacman_aur: visual-studio-code-bin
+      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
 
     watch:
       # Arch ships `watch` as part of procps-ng, not a standalone package.
