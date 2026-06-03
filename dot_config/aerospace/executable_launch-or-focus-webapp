@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+#
+# launch-or-focus-webapp — AeroSpace port of Omarchy's
+# omarchy-launch-or-focus-webapp. Focus an existing chromeless Chrome --app
+# (web-app) window whose page title matches PATTERN; if none exists, launch
+# URL as a fresh --app window. Chrome --app windows all report to the WM as
+# the "Google Chrome" app, so the page <title> is the only distinguishing
+# signal — hence the case-insensitive title match, scoped to Chrome windows.
+#
+# Usage: launch-or-focus-webapp <title-pattern> <url>
+
+pattern="$1"
+url="$2"
+chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+win=$(aerospace list-windows --all \
+  --format '%{window-id}%{tab}%{app-bundle-id}%{tab}%{window-title}' \
+  | awk -F'\t' -v p="$pattern" \
+      '$2 == "com.google.Chrome" && tolower($3) ~ tolower(p) { print $1; exit }')
+
+if [ -n "$win" ]; then
+  exec aerospace focus --window-id "$win"
+fi
+
+exec "$chrome" --app="$url"

@@ -110,25 +110,32 @@ alt-shift-6 = ['move-node-to-workspace 6', 'workspace 6']
 # split layout inside it. `new window` reuses the running app, fresh window.
 alt-enter = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window' '''
 
-# App launchers — open -a is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
+# App launchers — open -a / -b is focus-or-launch. Mirrors hypr SUPER+SHIFT+<key>.
 # Primary/secondary browser are per-machine: defaults are Firefox / Chrome;
 # override browser_primary / browser_secondary in the local chezmoi [data].
-alt-shift-enter = 'exec-and-forget open -a "{{ $primary }}"'
 alt-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
 alt-shift-cmd-b = 'exec-and-forget open -a "{{ $secondary }}"'
 alt-shift-o = 'exec-and-forget open -a Obsidian'
-alt-shift-f = 'exec-and-forget open -a Finder'
 alt-shift-t = 'exec-and-forget open -a "Activity Monitor"'
+# Claude desktop app by bundle id, not name — `open -a Claude` would fuzzy-match
+# the "Claude Code URL Handler" helper; the bundle id targets Claude.app exactly.
+alt-shift-cmd-a = 'exec-and-forget open -b com.anthropic.claudefordesktop'
+# Finder opens a fresh window each press (make new Finder window) rather than
+# focusing the existing one, then activates to pull focus to it.
+alt-shift-f = '''exec-and-forget osascript -e 'tell application "Finder" to make new Finder window' -e 'tell application "Finder" to activate' '''
 
 # Like alt-enter but opens the fresh Ghostty window straight into nvim. Same
 # reason for AppleScript over `open -n`: reuse the instance, skip restoration.
 alt-shift-n = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"nvim"}' '''
 
-# Web apps as chromeless Chrome PWA windows. The Chrome binary is invoked
+# Web apps as chromeless Chrome --app windows. The Chrome binary is invoked
 # directly because `open --args` is ignored when Chrome is already running.
+# Gmail and Calendar focus an existing window (launch-or-focus-webapp, an
+# AeroSpace port of omarchy-launch-or-focus-webapp) instead of stacking a new
+# one each press; ChatGPT and YouTube just launch fresh.
 alt-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
-alt-shift-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://mail.google.com/mail/'''
-alt-shift-c = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://calendar.google.com/calendar/u/0/r'''
+alt-shift-e = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Gmail https://mail.google.com/mail/'
+alt-shift-c = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp "Google Calendar" https://calendar.google.com/calendar/u/0/r'
 alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
 
 # Service mode: reload config, flatten layout, toggle float, close others
