@@ -43,6 +43,7 @@ packages:
       - font-jetbrains-mono-nerd-font
       - obsidian
       - raycast
+      - claude
       - visual-studio-code
       - kanban-md
       - docker
@@ -121,6 +122,11 @@ packages:
     raycast:
       darwin_kind: cask
       # macOS-only; install_pacman / install_apt will fail-skip on Linux.
+
+    claude:
+      darwin_kind: cask
+      # Anthropic's Claude desktop app (cask installs Claude.app). macOS-only;
+      # no official Linux package, so install_pacman / install_apt fail-skip.
 
     visual-studio-code:
       darwin_kind: cask
