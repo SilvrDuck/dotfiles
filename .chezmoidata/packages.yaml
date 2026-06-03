@@ -54,6 +54,7 @@ packages:
       # - aerospace
       - alt-tab
       - borders
+      - autoraise
 
     nvim:
       - neovim
@@ -117,51 +118,46 @@ packages:
     obsidian:
       darwin_kind: cask
       pacman_aur: obsidian
-      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
 
     raycast:
       darwin_kind: cask
-      # macOS-only; install_pacman / install_apt will fail-skip on Linux.
 
     claude:
       darwin_kind: cask
-      # Anthropic's Claude desktop app (cask installs Claude.app). macOS-only;
-      # no official Linux package, so install_pacman / install_apt fail-skip.
+      # Anthropic's Claude desktop app (the cask), not the claude CLI.
 
     visual-studio-code:
       darwin_kind: cask
       pacman_aur: visual-studio-code-bin
-      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
 
     watch:
       # Arch ships `watch` as part of procps-ng, not a standalone package.
       pacman: procps-ng
 
     d2:
-      # No upstream apt package; use the official install script.
       apt_manual: d2_script
 
     kanban-md:
       darwin: antopolskiy/tap/kanban-md
-      # No Linux package; install_pacman / install_apt will fail-skip.
 
     sbb-tui:
       darwin: necrom4/tap/sbb-tui
       pacman_aur: sbb-tui
-      # No upstream .deb; install_apt will fail-skip on apt-based boxes.
 
     # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
     # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
     # aerospace:
     #   darwin: nikitabobko/tap/aerospace
     #   darwin_kind: cask
-    #   # macOS-only tiling WM; install_pacman / install_apt fail-skip on Linux.
 
     alt-tab:
       darwin_kind: cask
-      # macOS-only window switcher; install_pacman / install_apt fail-skip on Linux.
 
     borders:
       darwin: FelixKratz/formulae/borders
-      # macOS-only focus-border daemon (JankyBorders) for AeroSpace;
-      # install_pacman / install_apt fail-skip on Linux.
+      # JankyBorders — focus-border daemon for AeroSpace.
+
+    autoraise:
+      darwin: dimentium/autoraise/autoraiseapp
+      darwin_kind: cask
+      # AutoRaise — focus-follows-mouse for AeroSpace (no native equivalent).
