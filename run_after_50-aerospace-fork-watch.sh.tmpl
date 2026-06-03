@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# AEROSPACE-FORK #1618 watch — TEMPORARY. Runs on every `chezmoi apply`; stays
+# silent unless upstream PR #1618 has merged (or was closed unmerged), then prints
+# a banner reminding you to return to the Homebrew cask. Delete this file at revert
+# (the runbook lives in .chezmoiexternals/aerospace-fork.toml.tmpl). Best-effort:
+# any network/tool hiccup exits 0 so it never blocks apply.
+{{ if .is_mac -}}
+json="$(curl -fsS --max-time 5 https://api.github.com/repos/nikitabobko/AeroSpace/pulls/1618 2>/dev/null)" || exit 0
+[ -n "$json" ] || exit 0
+
+if printf '%s' "$json" | grep -qE '"merged":[[:space:]]*true'; then
+  cat <<'MSG'
+
+========================= AEROSPACE-FORK #1618 =========================
+  PR #1618 has MERGED — mouse resize is upstream now.
+  Return to the Homebrew cask: ask Clank to run the revert runbook, or
+  follow the header of .chezmoiexternals/aerospace-fork.toml.tmpl.
+========================================================================
+
+MSG
+elif printf '%s' "$json" | grep -qE '"state":[[:space:]]*"closed"'; then
+  cat <<'MSG'
+
+========================= AEROSPACE-FORK #1618 =========================
+  PR #1618 was CLOSED WITHOUT MERGING — the fork is a dead end upstream.
+  Decide whether to keep running it or drop back to the brew cask.
+========================================================================
+
+MSG
+fi
+{{ end -}}
+exit 0

@@ -4,8 +4,11 @@
 # same tag) for as long as the PR is pending. The .app cannot live in /Applications
 # (outside $HOME, chezmoi can't write it) so it goes to ~/Applications.
 #
+# A sibling watch script (run_after_50-aerospace-fork-watch.sh.tmpl) checks this
+# PR on every `chezmoi apply` and stays silent until it merges (or is closed).
+#
 # WHEN PR #1618 MERGES — restore the clean brew state, in order:
-#   1. Delete this file.
+#   1. Delete this file AND run_after_50-aerospace-fork-watch.sh.tmpl.
 #   2. packages.yaml: un-comment the two AEROSPACE-FORK #1618 blocks (the
 #      `- aerospace` group entry and the `aerospace:` override); delete the tags.
 #   3. .chezmoiremove.tmpl: add (temporarily) under an is_mac guard:
