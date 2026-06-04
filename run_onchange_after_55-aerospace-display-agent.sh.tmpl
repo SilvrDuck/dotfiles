@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# (Re)loads the AeroSpace new-monitor arranger LaunchAgent. run_onchange so a
+# changed plist or helper re-bootstraps the running agent. macOS-only; off macOS
+# the plist and helper are not even applied (.chezmoiignore), so this is a no-op.
+#
+# plist hash:  {{ include "Library/LaunchAgents/com.dotfiles.aerospace-display.plist.tmpl" | sha256sum }}
+# helper hash: {{ include "dot_config/aerospace/executable_normalize-displays" | sha256sum }}
+{{ if .is_mac -}}
+set -euo pipefail
+
+label="com.dotfiles.aerospace-display"
+plist="$HOME/Library/LaunchAgents/${label}.plist"
+domain="gui/$(id -u)"
+
+# Log/seed dir must exist before launchd opens the StandardOutPath.
+mkdir -p "$HOME/.local/state/aerospace"
+
+# bootout then bootstrap = reload; both tolerate "not loaded yet" so first apply
+# and re-applies share one path.
+launchctl bootout "$domain/$label" 2>/dev/null || true
+launchctl bootstrap "$domain" "$plist" 2>/dev/null || true
+launchctl enable "$domain/$label" 2>/dev/null || true
+{{ end -}}
+exit 0

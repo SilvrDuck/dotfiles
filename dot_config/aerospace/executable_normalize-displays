@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# normalize-displays — when a brand-new external monitor is connected (one this
+# machine has never seen), make it the macOS Main display and stack it directly
+# above the built-in laptop panel. AeroSpace pins workspaces 1/2 to the 'main'
+# role (see aerospace.toml), so promoting the new screen to Main is what lands
+# those workspaces on it — AeroSpace cannot set the Main display or arrange
+# monitors itself, hence this helper + displayplacer.
+#
+# Driven by the com.dotfiles.aerospace-display LaunchAgent on a short poll. Acts
+# on a display only the first time it is seen: ids already in the seen-file are
+# left exactly as macOS remembers them. The first run on a fresh machine seeds
+# the seen-file with whatever is already connected, so monitors present at setup
+# time count as "known" and are never rearranged.
+#
+# Scope: acts only when exactly one external is connected (the "plug the laptop
+# into a single screen" case). Laptop-only and 2+ monitor layouts are untouched.
+#
+# Usage:
+#   normalize-displays            run once (what the LaunchAgent calls)
+#   normalize-displays --dry-run  print what it would do; change nothing
+#
+# State (machine-local, not chezmoi-managed):
+#   ${XDG_STATE_HOME:-~/.local/state}/aerospace/seen-displays
+
+set -uo pipefail
+
+# launchd hands us a minimal PATH (/usr/bin:/bin:…) that omits Homebrew, where
+# displayplacer lives — restore it so the binary resolves under the agent.
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
+command -v displayplacer >/dev/null 2>&1 || exit 0
+
+dry_run=false
+[ "${1:-}" = "--dry-run" ] && dry_run=true
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/aerospace"
+seen_file="$state_dir/seen-displays"
+mkdir -p "$state_dir"
+
+list="$(displayplacer list 2>/dev/null)" || exit 0
+
+# The replay line at the bottom of `displayplacer list` carries one ready-to-use
+# quoted argument per active display — the robust source for ids + current modes.
+# We reuse each segment verbatim and only ever rewrite its origin token.
+replay="$(printf '%s\n' "$list" | grep -E '^displayplacer "' || true)"
+[ -n "$replay" ] || exit 0
+
+segments=()
+while IFS= read -r seg; do
+  seg="${seg#\"}"
+  seg="${seg%\"}"
+  segments+=("$seg")
+done < <(printf '%s\n' "$replay" | grep -oE '"[^"]*"')
+# Guards an empty expansion under stock macOS Bash 3.2 + set -u below.
+[ "${#segments[@]}" -gt 0 ] || exit 0
+
+# field <segment> <key> -> value after "key:" (tokens are space-separated and
+# none of the values we read — id, res, origin — contain spaces).
+field() { printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2://p" | head -n1; }
+
+# Walk the per-display blocks to map the built-in panel by its Type label
+# ("MacBook built in screen"); everything else connected is an external.
+builtin_id=""
+cur_id=""
+while IFS= read -r line; do
+  case "$line" in
+    "Persistent screen id: "*) cur_id="${line#Persistent screen id: }" ;;
+    "Type: "*[Bb]uilt*[Ii]n*)   builtin_id="$cur_id" ;;
+  esac
+done < <(printf '%s\n' "$list")
+
+connected=()
+externals=()
+for seg in "${segments[@]}"; do
+  id="$(field "$seg" id)"
+  connected+=("$id")
+  [ "$id" = "$builtin_id" ] || externals+=("$id")
+done
+
+# arrange <external-id> -> echo the displayplacer command that puts the external
+# at origin (0,0) — which makes it Main — with the built-in centered below it.
+arrange() {
+  local ext_id="$1" seg id res ext_seg="" bi_seg="" ew eh bw bx
+  for seg in "${segments[@]}"; do
+    id="$(field "$seg" id)"
+    [ "$id" = "$ext_id" ]     && ext_seg="$seg"
+    [ "$id" = "$builtin_id" ] && bi_seg="$seg"
+  done
+  res="$(field "$ext_seg" res)"; ew="${res%x*}"; eh="${res#*x}"
+  res="$(field "$bi_seg"  res)"; bw="${res%x*}"
+  bx=$(( (ew - bw) / 2 ))
+  ext_seg="$(printf '%s' "$ext_seg" | sed -E 's/origin:[(][^)]*[)]/origin:(0,0)/')"
+  bi_seg="$(printf '%s'  "$bi_seg"  | sed -E "s/origin:[(][^)]*[)]/origin:($bx,$eh)/")"
+  printf 'displayplacer "%s" "%s"' "$ext_seg" "$bi_seg"
+}
+
+# No built-in (e.g. a desktop Mac): "above the built-in" is meaningless, bail.
+if [ -z "$builtin_id" ]; then
+  $dry_run && echo "[dry-run] no built-in panel detected; nothing to do"
+  exit 0
+fi
+
+# First run ever: treat everything currently attached as already-known so we
+# never rearrange a setup the user arrived with. Only later arrivals are "new".
+if [ ! -f "$seen_file" ]; then
+  $dry_run || printf '%s\n' "${connected[@]}" > "$seen_file"
+  $dry_run && echo "[dry-run] no seen-file yet; would seed with: ${connected[*]}"
+  exit 0
+fi
+
+# Out of scope: 0 externals (laptop only) or 2+ (multi-monitor). Leave the
+# arrangement alone, but record every attached id so a later single-external
+# plug is still judged fresh against a complete history.
+if [ "${#externals[@]}" -ne 1 ]; then
+  if ! $dry_run; then
+    printf '%s\n' "${connected[@]}" >> "$seen_file"
+    sort -u "$seen_file" -o "$seen_file"
+  fi
+  $dry_run && echo "[dry-run] ${#externals[@]} external(s); acts only on exactly 1"
+  exit 0
+fi
+
+ext_id="${externals[0]}"
+
+if $dry_run; then
+  echo "built-in: $builtin_id"
+  echo "external: $ext_id  (seen: $(grep -qxF "$ext_id" "$seen_file" 2>/dev/null && echo yes || echo no))"
+  echo "would run: $(arrange "$ext_id")"
+  exit 0
+fi
+
+# Already seen: respect whatever arrangement macOS remembers for it.
+grep -qxF "$ext_id" "$seen_file" 2>/dev/null && exit 0
+
+# Brand-new external: promote to Main + stack above the built-in, then remember
+# it so we never touch its arrangement again.
+eval "$(arrange "$ext_id")"
+printf '%s\n%s\n' "$builtin_id" "$ext_id" >> "$seen_file"
+sort -u "$seen_file" -o "$seen_file"

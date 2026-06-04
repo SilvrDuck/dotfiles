@@ -56,6 +56,7 @@ packages:
       - alt-tab
       - borders
       - autoraise
+      - displayplacer
       - nwg-displays
       - im-select
       - jordanbaird-ice
@@ -179,6 +180,11 @@ packages:
     nwg-displays:
       # Wayland (sway/Hyprland) display GUI — no macOS build.
       darwin_skip: true
+
+    displayplacer:
+      # macOS-only CLI used by the AeroSpace new-monitor arranger LaunchAgent
+      # to set a fresh external as Main + stack it above the built-in.
+      linux_skip: true
 
     jordanbaird-ice:
       # Ice — menu bar manager (macOS only).
