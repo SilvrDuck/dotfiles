@@ -35,20 +35,20 @@ outer.right = 6
 outer.top = 6
 outer.bottom = 6
 
-# Static workspace->monitor pins (row-major pairs), unified with hypr's
-# workspaces.conf. Roles not ports, so it survives dock/undock: 'main' tracks
-# the macOS Main display, 'built-in' the laptop panel. 3&4 pin to the secondary
-# external only when monitor_secondary is set in the local [data]; else omitted.
-# AeroSpace's 'secondary' keyword is avoided (valid only with exactly 2 monitors).
+# Static workspace->monitor pins. Roles not ports, so it survives dock/undock:
+# 'main' tracks the macOS Main display, 'built-in' the laptop panel — 1/2 land on
+# main, 3/4 on the built-in. Workspace 5 pins to a third screen only when
+# monitor_secondary is set in the local [data]; absent it, 5 falls back to the
+# focused monitor. AeroSpace's 'secondary' keyword is avoided (valid only with
+# exactly 2 monitors). 7-0 stay unpinned (focused); 6 is unbound (see bindings).
 [workspace-to-monitor-force-assignment]
 1 = 'main'
 2 = 'main'
+3 = 'built-in'
+4 = 'built-in'
 {{ if hasKey . "monitor_secondary" -}}
-3 = '{{ .monitor_secondary }}'
-4 = '{{ .monitor_secondary }}'
+5 = '{{ .monitor_secondary }}'
 {{ end -}}
-5 = 'built-in'
-6 = 'built-in'
 
 # Workspaces occasionally initialize to the accordion (stacked) layout despite
 # the 'tiles' default — upstream bug nikitabobko/AeroSpace#905. Rather than
@@ -90,19 +90,29 @@ alt-ctrl-j = 'join-with down'
 alt-ctrl-k = 'join-with up'
 alt-ctrl-l = 'join-with right'
 
-# Workspaces 1-6 (switch; shift = move window there and follow)
+# Workspaces (switch; shift = move window there and follow). 6 is deliberately
+# left UNBOUND so EurKEY's circumflex dead key (Option+6, e.g. ê) composes:
+# AeroSpace cannot tell left- from right-Option, so any alt-6 binding would eat
+# it — the same concession already made for alt-f above. 1-5 pin per the
+# assignment block; 7-0 are unpinned scratch workspaces on the focused monitor.
 alt-1 = 'workspace 1'
 alt-2 = 'workspace 2'
 alt-3 = 'workspace 3'
 alt-4 = 'workspace 4'
 alt-5 = 'workspace 5'
-alt-6 = 'workspace 6'
+alt-7 = 'workspace 7'
+alt-8 = 'workspace 8'
+alt-9 = 'workspace 9'
+alt-0 = 'workspace 0'
 alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1']
 alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2']
 alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3']
 alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4']
 alt-shift-5 = ['move-node-to-workspace 5', 'workspace 5']
-alt-shift-6 = ['move-node-to-workspace 6', 'workspace 6']
+alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7']
+alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8']
+alt-shift-9 = ['move-node-to-workspace 9', 'workspace 9']
+alt-shift-0 = ['move-node-to-workspace 0', 'workspace 0']
 
 # New terminal window in the *existing* Ghostty instance, via Ghostty 1.3+
 # native AppleScript. Not `open -n -a Ghostty`: -n spawns a second app
