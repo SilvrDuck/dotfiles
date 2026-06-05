@@ -3,7 +3,7 @@
 # every `chezmoi update` too), but self-gates to at most once per 24h via a
 # stamp. The same stamp drives the "no upgrade in the last week" reminder in
 # dot_zshrc.tmpl. Best-effort: every step is `|| echo …` and never aborts the
-# apply. Foreground only — there is no background updater anymore.
+# apply.
 set -u
 {{ if eq .machine_kind "devcontainer" -}}
 exit 0
