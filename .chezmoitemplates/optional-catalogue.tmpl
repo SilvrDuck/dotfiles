@@ -1,0 +1,26 @@
+{{- /* Per-OS catalogue of optional package groups for scripts/pick-packages.
+       Emits one line per group that has at least one member valid on this OS:
+
+         groupkey|Group label|member1,member2,...
+
+       Members are the group's `packages` (a package is valid unless its
+       override marks it skipped on .chezmoi.os) followed by its cross-platform
+       `upstream` ids. Platform filtering lives next to the package data rather
+       than in the picker. Consumed via `chezmoi execute-template`, baked into
+       the first-run bootstrap, and written to the catalogue cache. */ -}}
+{{- $os := .chezmoi.os -}}
+{{- range $key, $grp := .packages.optional -}}
+{{-   $valid := list -}}
+{{-   range $m := $grp.packages -}}
+{{-     $skip := false -}}
+{{-     with (index $.packages.overrides $m) -}}
+{{-       if and (eq $os "darwin") (index . "darwin_skip") }}{{ $skip = true }}{{ end -}}
+{{-       if and (eq $os "linux") (index . "linux_skip") }}{{ $skip = true }}{{ end -}}
+{{-     end -}}
+{{-     if not $skip }}{{ $valid = append $valid $m }}{{ end -}}
+{{-   end -}}
+{{-   range $u := (index $grp "upstream" | default list) }}{{ $valid = append $valid $u }}{{ end -}}
+{{-   if gt (len $valid) 0 -}}
+{{ $key }}|{{ $grp.label }}|{{ join "," $valid }}
+{{ end -}}
+{{- end -}}

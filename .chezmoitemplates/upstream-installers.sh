@@ -4,7 +4,7 @@
 # Review the URLs below if that ever feels wrong.
 
 cat <<'UPSTREAM'
-[packages] Installing upstream tools (AI CLIs, uv, pay-respects on macOS).
+[packages] Installing upstream tools (uv, chosen AI CLIs, pay-respects on macOS).
 This is intentional: review the install URLs in upstream-installers.sh.
 UPSTREAM
 
@@ -22,9 +22,16 @@ install_pi() {
   fi
 }
 
-command -v claude   >/dev/null 2>&1 || curl -fsSL https://claude.ai/install.sh | bash                       || true
-command -v opencode >/dev/null 2>&1 || curl -fsSL https://opencode.ai/install   | bash -s -- --no-modify-path || true
-install_pi
+# AI CLIs are opt-in: gated on the per-machine choices file (scripts/pick-packages).
+if pkg_chosen "claude-cli"; then
+  command -v claude >/dev/null 2>&1 || curl -fsSL https://claude.ai/install.sh | bash || true
+fi
+if pkg_chosen "opencode"; then
+  command -v opencode >/dev/null 2>&1 || curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path || true
+fi
+if pkg_chosen "pi"; then
+  install_pi
+fi
 
 # uv: official installer. Graphify needs it; generally useful for Python work.
 command -v uv >/dev/null 2>&1 || curl -fsSL https://astral.sh/uv/install.sh | sh || true

@@ -60,3 +60,13 @@ install_apt() {
   echo "[apt] $name"
   $SUDO apt-get install -y "$name" || echo "[apt] skipped or failed: $name"
 }
+
+# Per-machine opt-in gate. scripts/pick-packages records one "<id>=1" (install)
+# or "<id>=0" (skip) line per optional package in this file; pkg_chosen is true
+# only for "=1". A missing file means nothing optional installs, so a fresh or
+# non-interactive machine gets the baseline only until the picker runs.
+CHOICES_FILE="${CHOICES_FILE:-$HOME/.config/dotfiles/package-choices}"
+
+pkg_chosen() {
+  grep -qxF "$1=1" "$CHOICES_FILE" 2>/dev/null
+}

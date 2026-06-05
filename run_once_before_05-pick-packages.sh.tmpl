@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# First-run package picker. Auto-launches the interactive opt-in picker once,
+# during initial setup and before 10-packages installs, so a new machine starts
+# with only the optional apps you choose. TTY-guarded: a non-interactive apply
+# (CI, a piped bootstrap) skips it and installs the baseline only -- run
+# scripts/pick-packages by hand on such a machine to choose later.
+set -u
+
+{{ if ne .machine_kind "devcontainer" -}}
+choices_file="$HOME/.config/dotfiles/package-choices"
+
+# Already answered on this machine, or no interactive terminal: nothing to do.
+[ -f "$choices_file" ] && exit 0
+[ -t 0 ] && [ -t 1 ] || exit 0
+
+# Bake the catalogue in so the picker needs no chezmoi call while this apply
+# holds the source state (avoids a nested chezmoi invocation mid-apply).
+PICK_CATALOGUE="$(cat <<'CATALOGUE'
+{{ template "optional-catalogue.tmpl" . }}
+CATALOGUE
+)"
+export PICK_CATALOGUE
+
+"{{ .chezmoi.sourceDir }}/scripts/pick-packages" --no-apply || true
+{{ end -}}

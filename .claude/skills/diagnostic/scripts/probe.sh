@@ -55,11 +55,15 @@ elif ! has yq; then
 elif [ -z "$MGR" ]; then
   emit packages '*' unknown "no supported package manager on this host"
 else
+  # Optional packages are opt-in per machine; an unchosen one is not "missing".
+  optional_keys=" $(yq -r '.packages.optional[].packages[]' "$PKG_YAML" 2>/dev/null | tr '\n' ' ') "
+  choices="$HOME/.config/dotfiles/package-choices"
+
   # Pipe-delimit because read collapses consecutive whitespace IFS chars
   # (including \t), which would drop empty override fields.
   yq -r '
     .packages as $p
-    | $p.groups[][] as $key
+    | ($p.baseline[][], $p.optional[].packages[]) as $key
     | ($p.overrides[$key] // {}) as $o
     | [
         $key,
@@ -70,8 +74,17 @@ else
         ($o.apt_manual // "")
       ] | join("|")
   ' "$PKG_YAML" | while IFS='|' read -r key pac aur drv apt_name manual; do
+    # Opt-in package not chosen on this machine -> not expected, not missing.
+    case " $optional_keys " in
+      *" $key "*)
+        grep -qxF "$key=1" "$choices" 2>/dev/null || {
+          emit packages "$key" "n/a" "optional; not opted in on this machine"
+          continue
+        } ;;
+    esac
     case "$MGR" in
-      pacman) name="${pac:-${aur:-$key}}" ;;   # AUR shows up in pacman db
+      # AUR packages surface in the pacman db, so $aur is a valid fallback.
+      pacman) name="${pac:-${aur:-$key}}" ;;
       brew)   name="${drv:-$key}" ;;
       apt)
         if [ -n "$manual" ]; then

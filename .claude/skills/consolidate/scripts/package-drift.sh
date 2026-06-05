@@ -27,7 +27,7 @@ expected_brew=$(mktemp);   expected_apt=$(mktemp)
 trap 'rm -f "$expected_pacman" "$expected_aur" "$expected_brew" "$expected_apt"' EXIT
 
 yq -r '
-  .packages.groups[][] as $tool
+  (.packages.baseline[][], .packages.optional[].packages[]) as $tool
   | (.packages.overrides[$tool] // {}) as $o
   | [
       (($o.pacman     // $tool) + "\tpacman"),

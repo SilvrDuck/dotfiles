@@ -3,6 +3,7 @@ set -euo pipefail
 
 # machine_kind: {{ .machine_kind }}
 # package data hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
+# choices hash: {{ $c := joinPath .chezmoi.homeDir ".config/dotfiles/package-choices" }}{{ if stat $c }}{{ output "cat" $c | sha256sum }}{{ else }}none{{ end }}
 
 if command -v sudo >/dev/null 2>&1; then
   SUDO=sudo
@@ -10,12 +11,22 @@ else
   SUDO=
 fi
 
+# Flatten every package into one install list and remember which ones are
+# optional. Baseline packages install unconditionally; optional ones are
+# wrapped in `pkg_chosen` so they install only when the local choices file
+# (written by scripts/pick-packages) opts in. On a fresh / non-interactive
+# machine there is no choices file, so nothing optional installs.
 {{ $allTools := list }}
-{{ range $groupName, $tools := .packages.groups }}
-{{ if or (ne $groupName "desktop") (ne $.machine_kind "devcontainer") }}
+{{ $optional := dict }}
+{{ range $groupName, $tools := .packages.baseline }}
 {{ range $tool := $tools }}
 {{ $allTools = append $allTools $tool }}
 {{ end }}
+{{ end }}
+{{ range $key, $grp := .packages.optional }}
+{{ range $tool := $grp.packages }}
+{{ $allTools = append $allTools $tool }}
+{{ $optional = set $optional $tool true }}
 {{ end }}
 {{ end }}
 
@@ -40,9 +51,12 @@ fi
 {{ with (index . "darwin") }}{{ $name = . }}{{ end }}
 {{ with (index . "darwin_kind") }}{{ $kind = . }}{{ end }}
 {{ with (index . "darwin_skip") }}{{ $skip = . }}{{ end }}
+{{ if and (eq $.machine_kind "devcontainer") (index . "devcontainer_skip") }}{{ $skip = true }}{{ end }}
 {{ end }}
 {{ if not $skip }}
+{{ if hasKey $optional $tool }}if pkg_chosen {{ $tool | quote }}; then{{ end }}
 install_brew {{ $kind | quote }} {{ $name | quote }}
+{{ if hasKey $optional $tool }}fi{{ end }}
 {{ end }}
 {{ end }}
 
@@ -57,13 +71,16 @@ if command -v pacman >/dev/null 2>&1; then
 {{ with (index . "pacman") }}{{ $name = . }}{{ end }}
 {{ with (index . "pacman_aur") }}{{ $aur = . }}{{ end }}
 {{ with (index . "linux_skip") }}{{ $skip = . }}{{ end }}
+{{ if and (eq $.machine_kind "devcontainer") (index . "devcontainer_skip") }}{{ $skip = true }}{{ end }}
 {{ end }}
 {{ if not $skip }}
+{{ if hasKey $optional $tool }}if pkg_chosen {{ $tool | quote }}; then{{ end }}
 {{ if $aur }}
   install_yay {{ $aur | quote }}
 {{ else }}
   install_pacman {{ $name | quote }}
 {{ end }}
+{{ if hasKey $optional $tool }}fi{{ end }}
 {{ end }}
 {{ end }}
 
@@ -80,8 +97,10 @@ elif command -v apt-get >/dev/null 2>&1; then
 {{ with (index . "apt") }}{{ $name = . }}{{ end }}
 {{ with (index . "apt_manual") }}{{ $manual = . }}{{ end }}
 {{ with (index . "linux_skip") }}{{ $skip = . }}{{ end }}
+{{ if and (eq $.machine_kind "devcontainer") (index . "devcontainer_skip") }}{{ $skip = true }}{{ end }}
 {{ end }}
 {{ if not $skip }}
+{{ if hasKey $optional $tool }}if pkg_chosen {{ $tool | quote }}; then{{ end }}
 {{ if eq $manual "antidote_git" }}
   install_manual_antidote
 {{ else if eq $manual "neovim_tarball" }}
@@ -107,6 +126,7 @@ elif command -v apt-get >/dev/null 2>&1; then
 {{ else }}
   install_apt {{ $name | quote }}
 {{ end }}
+{{ if hasKey $optional $tool }}fi{{ end }}
 {{ end }}
 {{ end }}
 
@@ -120,6 +140,15 @@ fi
 # -----------------------------------------------------------------------------
 
 {{ template "upstream-installers.sh" . }}
+
+# -----------------------------------------------------------------------------
+# Cache the per-OS optional catalogue for the shell "unanswered apps" notice.
+# -----------------------------------------------------------------------------
+
+mkdir -p "$HOME/.cache/dotfiles"
+cat > "$HOME/.cache/dotfiles/optional-catalogue" <<'CATALOGUE'
+{{ template "optional-catalogue.tmpl" . }}
+CATALOGUE
 
 # -----------------------------------------------------------------------------
 # Default login shell -> zsh (Linux only; macOS uses its own flow)

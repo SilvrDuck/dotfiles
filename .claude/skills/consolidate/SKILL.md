@@ -53,7 +53,7 @@ Produce five buckets:
 bash "${CLAUDE_SKILL_DIR}/scripts/package-drift.sh"
 ```
 
-Emits TSV `manager<TAB>name` for every explicit install on this machine that isn't accounted for by `packages.yaml` (the script reads `.packages.groups` and resolves every per-manager override — `pacman`, `pacman_aur`, `darwin`, `apt` — so the diff respects renames).
+Emits TSV `manager<TAB>name` for every explicit install on this machine that isn't accounted for by `packages.yaml` (the script reads `.packages.baseline` + `.packages.optional[].packages` and resolves every per-manager override — `pacman`, `pacman_aur`, `darwin`, `apt` — so the diff respects renames).
 
 Filter out obvious system / transitive packages — only surface things a human would intentionally install. The script only probes managers that are present on the host.
 

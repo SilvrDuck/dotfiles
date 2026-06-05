@@ -1,5 +1,11 @@
 packages:
-  groups:
+  # Two MECE buckets by install policy. Every package sits in exactly one.
+  #   baseline — installed on every machine, never asked.
+  #   optional — opt-in per machine via scripts/pick-packages; the install gates
+  #              each member on the local choices file (~/.config/dotfiles/
+  #              package-choices). Unanswered / non-interactive ⇒ skipped.
+  # Per-manager name/kind/skip quirks live in `overrides`, keyed by package name.
+  baseline:
     core:
       - git
       - gh
@@ -34,35 +40,59 @@ packages:
       - cmake
       - hyperfine
       - xh
-      - d2
-      - plantuml
       - sbb-tui
-
-    desktop:
-      - ghostty
-      - font-jetbrains-mono-nerd-font
-      - obsidian
-      - raycast
-      - claude
-      - visual-studio-code
       - kanban-md
-      - docker
-      - docker-compose
-      - lazydocker
-      # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
-      # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
-      # - aerospace
-      - alt-tab
-      - borders
-      - autoraise
-      - displayplacer
-      - nwg-displays
-      - im-select
-      - jordanbaird-ice
 
     nvim:
       - neovim
       - tree-sitter
+
+    fonts:
+      - font-jetbrains-mono-nerd-font
+
+  # Each group is one toggle in the picker: `label` is shown to the user,
+  # `packages` are real packages installed by this loop, and `upstream` are
+  # curl|bash ids installed by upstream-installers.sh (gated the same way).
+  optional:
+    ai-tools:
+      label: AI tools
+      packages:
+        - claude
+      upstream:
+        - claude-cli
+        - opencode
+        - pi
+    containers:
+      label: Containers
+      packages:
+        - docker
+        - docker-compose
+        - lazydocker
+    gui-apps:
+      label: GUI apps
+      packages:
+        - obsidian
+        - visual-studio-code
+        - ghostty
+    desktop-tools:
+      label: Desktop & window management
+      packages:
+        - raycast
+        # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
+        # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
+        # - aerospace
+        - alt-tab
+        - borders
+        - autoraise
+        - displayplacer
+        - im-select
+        - jordanbaird-ice
+        - nwg-displays
+    mcp-deps:
+      label: MCP deps
+      packages:
+        - d2
+        - plantuml
 
   overrides:
     gh:
@@ -80,6 +110,8 @@ packages:
       # apt's fonts-jetbrains-mono is the regular font without nerd glyphs,
       # so pull the official Nerd Font tarball into ~/.local/share/fonts.
       apt_manual: jetbrains_mono_nerd
+      # GUI-only: a nerd font is dead weight on a headless devcontainer.
+      devcontainer_skip: true
 
     ghostty:
       darwin_kind: cask
@@ -125,9 +157,11 @@ packages:
 
     raycast:
       darwin_kind: cask
+      linux_skip: true
 
     claude:
       darwin_kind: cask
+      linux_skip: true
       # Anthropic's Claude desktop app (the cask), not the claude CLI.
 
     visual-studio-code:
@@ -143,6 +177,8 @@ packages:
 
     kanban-md:
       darwin: antopolskiy/tap/kanban-md
+      # Darwin-only tap; skip on devcontainers (it would only fail there).
+      devcontainer_skip: true
 
     sbb-tui:
       darwin: necrom4/tap/sbb-tui
@@ -156,6 +192,7 @@ packages:
 
     alt-tab:
       darwin_kind: cask
+      linux_skip: true
 
     im-select:
       # Input-source switcher CLI.
@@ -164,11 +201,13 @@ packages:
 
     borders:
       darwin: FelixKratz/formulae/borders
+      linux_skip: true
       # JankyBorders — focus-border daemon for AeroSpace.
 
     autoraise:
       darwin: dimentium/autoraise/autoraiseapp
       darwin_kind: cask
+      linux_skip: true
       # AutoRaise — focus-follows-mouse for AeroSpace (no native equivalent).
 
     nwg-displays:
