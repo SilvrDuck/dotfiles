@@ -37,7 +37,6 @@ packages:
       - d2
       - plantuml
       - sbb-tui
-      - engram
 
     desktop:
       - ghostty
@@ -148,11 +147,6 @@ packages:
     sbb-tui:
       darwin: necrom4/tap/sbb-tui
       pacman_aur: sbb-tui
-
-    engram:
-      # Persistent memory for AI coding agents.
-      darwin: gentleman-programming/tap/engram
-      linux_skip: true
 
     # AEROSPACE-FORK #1618: brew cask disabled while running tymscar's fork.
     # Restore on merge — see .chezmoiexternals/aerospace-fork.toml.tmpl.
