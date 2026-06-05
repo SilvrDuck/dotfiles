@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Upgrade all installed programs to latest. Runs on every `chezmoi apply` (so
+# every `chezmoi update` too), but self-gates to at most once per 24h via a
+# stamp. The same stamp drives the "no upgrade in the last week" reminder in
+# dot_zshrc.tmpl. Best-effort: every step is `|| echo …` and never aborts the
+# apply. Foreground only — there is no background updater anymore.
+set -u
+{{ if eq .machine_kind "devcontainer" -}}
+exit 0
+{{ end -}}
+stamp="$HOME/.cache/dotfiles/upgrade.stamp"
+mkdir -p "${stamp%/*}"
+if [ -f "$stamp" ] && [ -n "$(find "$stamp" -mmin -1440 2>/dev/null)" ]; then
+  echo "[upgrade] skipped (upgraded <24h ago)"
+  exit 0
+fi
+
+echo "[upgrade] refreshing all installed programs"
+
+{{ if .is_mac -}}
+if command -v brew >/dev/null 2>&1; then
+  brew update --quiet         || echo "[brew] update skipped or failed"
+  brew upgrade --quiet        || echo "[brew] upgrade skipped or failed"
+  brew upgrade --cask --quiet || echo "[brew] cask upgrade skipped or failed"
+fi
+{{ end -}}
+{{ if .is_linux -}}
+if [ -d "$HOME/.local/share/omarchy" ]; then
+  echo "[omarchy] run 'omarchy update' manually (interactive, owns its cadence)"
+elif command -v pacman >/dev/null 2>&1; then
+  if sudo -n true 2>/dev/null; then
+    sudo -n pacman -Syu --noconfirm || echo "[pacman] upgrade skipped or failed"
+    command -v yay >/dev/null 2>&1 && { yay -Syu --noconfirm || echo "[yay] upgrade skipped or failed"; }
+  else
+    echo "[pacman] skipped: needs sudo (run 'sudo -v' first)"
+  fi
+elif command -v apt-get >/dev/null 2>&1; then
+  if sudo -n true 2>/dev/null; then
+    sudo -n apt-get update -y  || echo "[apt] update skipped or failed"
+    sudo -n apt-get upgrade -y || echo "[apt] upgrade skipped or failed"
+  else
+    echo "[apt] skipped: needs sudo (run 'sudo -v' first)"
+  fi
+fi
+{{ end -}}
+if command -v mise >/dev/null 2>&1; then
+  mise self-update -y || echo "[mise] self-update skipped (brew-managed?)"
+  mise upgrade        || echo "[mise] upgrade skipped or failed"
+fi
+
+if command -v claude >/dev/null 2>&1; then
+  curl -fsSL https://claude.ai/install.sh | bash || echo "[claude] update skipped or failed"
+fi
+
+if command -v opencode >/dev/null 2>&1; then
+  curl -fsSL https://opencode.ai/install | bash -s -- --no-modify-path || echo "[opencode] update skipped or failed"
+fi
+
+if command -v pi >/dev/null 2>&1; then
+  if command -v mise >/dev/null 2>&1; then
+    mise x node@lts -- npm install -g @earendil-works/pi-coding-agent@latest || echo "[pi] update skipped or failed"
+  elif command -v npm >/dev/null 2>&1; then
+    npm install -g @earendil-works/pi-coding-agent@latest || echo "[pi] update skipped or failed"
+  fi
+fi
+
+if command -v uv >/dev/null 2>&1; then
+  uv self update || echo "[uv] update skipped or failed"
+fi
+
+touch "$stamp"
+echo "[upgrade] done"

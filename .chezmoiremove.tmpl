@@ -6,3 +6,12 @@
 Library/LaunchAgents/com.silvrduck.vault-sync.plist
 {{ end -}}
 .local/bin/vault-sync
+
+# Stale runtime cache from the removed async auto-updater (now notify-only
+# checks + a foreground upgrade pass). Wiped on every machine's next apply.
+.cache/chezmoi-update.stamp
+.cache/chezmoi-update.log
+.cache/chezmoi-update.failed
+.cache/tools-update.stamp
+.cache/tools-update.log
+.cache/tools-update.failed

@@ -284,58 +284,57 @@ claude() { command claude --effort xhigh "$@"; }           # default xhigh; --ef
 command -v claude >/dev/null && alias cc='claude' ccc='claude --continue'
 
 # -----------------------------------------------------------------------------
-# Auto-updates — async, interval-gated, never blocks shell start
-# Each job has its own cadence in hours. First qualifying shell after the
-# window wins; concurrent shells racing on startup skip via the stamp touch.
+# Update notices — passive, never run anything. The only network touch is a
+# detached, 6h-gated, read-only `git fetch` that refreshes remote refs so the
+# per-shell "behind origin" check has fresh data to read; it holds no chezmoi
+# lock and can never block the prompt. A separate weekly reminder fires when no
+# program upgrade has run in the last week. Both notices print the command on
+# its own line so it is directly copy-pastable.
 # -----------------------------------------------------------------------------
 
 {{ if ne .machine_kind "devcontainer" -}}
-typeset -ga _dotfiles_async_jobs
-
-# Usage: _dotfiles_async <interval-hours> <job-name> <cmd> [args...]
-# Output → ~/.cache/<name>.log. On non-zero exit, ~/.cache/<name>.failed is
-# left behind so the next shell can surface a diagnosis prompt. stdin is
-# /dev/null: a backgrounded job that reads the TTY gets SIGTTIN-stopped, and a
-# suspended job can strand a held lock (e.g. chezmoi's persistent-state lock).
-_dotfiles_async() {
-  local hours="$1"; shift
-  local name="$1"; shift
-  _dotfiles_async_jobs+=( "$name" )
-  local stamp="$HOME/.cache/$name.stamp"
-  local -a stale=( $stamp(Nmh+$hours) )                    # zsh glob qualifier
-  [[ -e $stamp && ${#stale} -eq 0 ]] && return
-  mkdir -p ${stamp:h}
-  touch $stamp                                             # claim slot pre-fork
-  (
-    "$@" </dev/null >"$HOME/.cache/$name.log" 2>&1
-    if (( $? == 0 )); then
-      rm -f "$HOME/.cache/$name.failed"
-    else
-      touch "$HOME/.cache/$name.failed"
-    fi
-  ) &!
-}
-
 if command -v chezmoi >/dev/null; then
-  _dotfiles_async 2 chezmoi-update chezmoi update --refresh-externals
   () {
     local src; src="$(chezmoi source-path 2>/dev/null)" || return
-    local script="$src/tools/auto-update-tools"
-    [[ -x $script ]] && _dotfiles_async 24 tools-update "$script"
+    local cache="$HOME/.cache/dotfiles"
+    mkdir -p "$cache"
+
+    # 6h-gated background ref refresh. Detached and read-only: git's own
+    # connect/low-speed timeouts plus BatchMode keep it from hanging on a dead
+    # network or a credential prompt, and the stamp is touched pre-fork so a
+    # stuck fetch never respawns within the window.
+    local fstamp="$cache/fetch.stamp"
+    local -a fetch_stale=( $fstamp(Nmh+6) )
+    if [[ ! -e $fstamp || ${#fetch_stale} -gt 0 ]]; then
+      touch "$fstamp"
+      ( GIT_TERMINAL_PROMPT=0 \
+        GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=10' \
+        git -C "$src" -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=15 \
+          fetch --quiet 2>/dev/null ) &!
+    fi
+
+    # Behind origin? Local and instant — reads the refs the fetch refreshed.
+    local behind
+    behind=$(git -C "$src" rev-list --count HEAD..@{upstream} 2>/dev/null || echo 0)
+    if [ "$behind" -gt 0 ]; then
+      print -P "%F{yellow}dotfiles: $behind commit(s) behind origin. Run:%f"
+      print "chezmoi update --refresh-externals"
+    fi
+
+    # Weekly reminder, gated to fire at most once a week: nag when no program
+    # upgrade has landed in the last week (the upgrade pass touches the stamp).
+    local wstamp="$cache/weekly-check.stamp"
+    local -a week_stale=( $wstamp(Nmh+168) )
+    if [[ ! -e $wstamp || ${#week_stale} -gt 0 ]]; then
+      touch "$wstamp"
+      local -a upg_recent=( $cache/upgrade.stamp(Nmh-168) )
+      if [[ ! -e $cache/upgrade.stamp || ${#upg_recent} -eq 0 ]]; then
+        print -P "%F{yellow}dotfiles: no program upgrade in the last week. Run:%f"
+        print "chezmoi update --refresh-externals"
+      fi
+    fi
   }
 fi
-
-# Surface prior failures: one yellow notice per job with a paste-and-run
-# `clank "..."` line so a single select + Enter starts a diagnosis.
-() {
-  local job log
-  for job in ${_dotfiles_async_jobs[@]}; do
-    [[ -f $HOME/.cache/$job.failed ]] || continue
-    log="~/.cache/$job.log"
-    print -P "%F{yellow}[$job] last run had failures.%f Diagnose with:"
-    print "clank \"review $log, list every failure, and propose fix commands I can run by hand — do not change anything yourself\""
-  done
-}
 {{- end }}
 
 # -----------------------------------------------------------------------------
