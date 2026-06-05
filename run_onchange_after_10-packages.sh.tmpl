@@ -142,15 +142,6 @@ fi
 {{ template "upstream-installers.sh" . }}
 
 # -----------------------------------------------------------------------------
-# Cache the per-OS optional catalogue for the shell "unanswered apps" notice.
-# -----------------------------------------------------------------------------
-
-mkdir -p "$HOME/.cache/dotfiles"
-cat > "$HOME/.cache/dotfiles/optional-catalogue" <<'CATALOGUE'
-{{ template "optional-catalogue.tmpl" . }}
-CATALOGUE
-
-# -----------------------------------------------------------------------------
 # Default login shell -> zsh (Linux only; macOS uses its own flow)
 # -----------------------------------------------------------------------------
 

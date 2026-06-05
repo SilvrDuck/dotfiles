@@ -333,26 +333,6 @@ if command -v chezmoi >/dev/null; then
         print "chezmoi update --refresh-externals"
       fi
     fi
-
-    # Unanswered optional apps: the package install writes this machine's
-    # optional catalogue; nag for any member the local choices file hasn't
-    # answered yet (i.e. a newly added opt-in app you've not chosen here).
-    local cat_file="$cache/optional-catalogue"
-    local choices="$HOME/.config/dotfiles/package-choices"
-    if [[ -s $cat_file ]]; then
-      local -a pending=()
-      local key label members m
-      while IFS='|' read -r key label members; do
-        [[ -z $members ]] && continue
-        for m in ${(s:,:)members}; do
-          grep -qE "^${m}=" "$choices" 2>/dev/null || pending+=("$m")
-        done
-      done < "$cat_file"
-      if (( ${#pending} > 0 )); then
-        print -P "%F{yellow}dotfiles: ${#pending} optional app(s) not yet chosen. Run:%f"
-        print "$src/scripts/pick-packages"
-      fi
-    fi
   }
 fi
 {{- end }}

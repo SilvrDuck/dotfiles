@@ -1,0 +1,32 @@
+{{- /* Per-OS install-detection specs for the optional packages, consumed by
+       run_before_05-pick-packages so it can adopt what's already installed.
+       One line per member valid on this OS:  member|type|arg
+
+         cask     -> installed if `arg` is in `brew list --cask`
+         formula  -> installed if `arg` is in `brew list --formula`
+         cmd      -> installed if `arg` is on PATH (CLIs, upstream tools, Linux)
+
+       darwin casks/tap-formulae resolve `arg` to the brew token (basename of
+       the override name); everything else probes the binary. Upstream ids map
+       to their binary by dropping a trailing "-cli" (claude-cli -> claude). */ -}}
+{{- $os := .chezmoi.os -}}
+{{- range $key, $grp := .packages.optional -}}
+{{-   range $m := $grp.packages -}}
+{{-     $skip := false -}}
+{{-     $type := "cmd" -}}
+{{-     $arg := $m -}}
+{{-     with (index $.packages.overrides $m) -}}
+{{-       if and (eq $os "darwin") (index . "darwin_skip") }}{{ $skip = true }}{{ end -}}
+{{-       if and (eq $os "linux") (index . "linux_skip") }}{{ $skip = true }}{{ end -}}
+{{-       if eq $os "darwin" -}}
+{{-         if eq (index . "darwin_kind") "cask" -}}
+{{-           $type = "cask" -}}{{- $arg = base (index . "darwin" | default $m) -}}
+{{-         else if (index . "darwin") -}}
+{{-           $type = "formula" -}}{{- $arg = base (index . "darwin") -}}
+{{-         end -}}
+{{-       end -}}
+{{-     end -}}
+{{-     if not $skip }}{{ printf "%s|%s|%s\n" $m $type $arg }}{{ end -}}
+{{-   end -}}
+{{-   range $u := (index $grp "upstream" | default list) }}{{ printf "%s|cmd|%s\n" $u (trimSuffix "-cli" $u) }}{{ end -}}
+{{- end -}}

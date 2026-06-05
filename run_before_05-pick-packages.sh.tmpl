@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# Optional-package picker -- runs automatically inside every `chezmoi apply` /
+# `chezmoi update`, before the package install. There is nothing to run by hand.
+#
+#   - First contact on a machine that already has optional apps installed:
+#     silently adopt them (installed -> yes, absent -> no). No prompt.
+#   - First contact on a fresh machine (nothing installed) with a terminal:
+#     walk the groups so you choose what to install.
+#   - Afterwards: only genuinely new optional apps (added upstream) are asked,
+#     one at a time, on the next interactive apply.
+#   - No terminal attached (cron / CI / piped bootstrap): does nothing, never
+#     blocks; new apps wait for the next interactive apply.
+#
+# Choices live in ~/.config/dotfiles/package-choices (local, unsynced) and the
+# package install reads them. To change an adopted choice, edit that file (or
+# delete it to re-adopt from the current install state).
+set -u
+
+{{ if ne .machine_kind "devcontainer" -}}
+choices="$HOME/.config/dotfiles/package-choices"
+
+# Probe table (member|type|arg) and grouped catalogue (key|label|m1,m2,...),
+# both baked here and platform-filtered so this needs no chezmoi call at runtime.
+probe="$(cat <<'PROBE'
+{{ template "optional-probe.tmpl" . }}
+PROBE
+)"
+catalogue="$(cat <<'CATALOGUE'
+{{ template "optional-catalogue.tmpl" . }}
+CATALOGUE
+)"
+
+answered() { grep -qE "^$1=" "$choices" 2>/dev/null; }
+
+# Cheap first pass: which members are unanswered? (no package-manager calls)
+unanswered=""
+while IFS='|' read -r m type arg; do
+  [ -n "$m" ] || continue
+  answered "$m" || unanswered="$unanswered $m"
+done <<EOF
+$probe
+EOF
+[ -n "${unanswered# }" ] || exit 0
+
+# Something is pending -> now resolve install state (the costlier part).
+{{ if eq .chezmoi.os "darwin" -}}
+_formulae="$(brew list --formula -1 2>/dev/null || true)"
+_casks="$(brew list --cask -1 2>/dev/null || true)"
+{{ end -}}
+# is_installed <type> <arg>: true when the member is present on this machine.
+is_installed() {
+  case "$1" in
+{{ if eq .chezmoi.os "darwin" -}}
+    cask)    printf '%s\n' "${_casks:-}"    | grep -qxF "$2" ;;
+    formula) printf '%s\n' "${_formulae:-}" | grep -qxF "$2" ;;
+{{ end -}}
+    *)       command -v "$2" >/dev/null 2>&1 ;;
+  esac
+}
+
+# ask_yn "<prompt>" <default 0|1>: echoes 0 or 1, reading the answer from /dev/tty.
+ask_yn() {
+  local prompt="$1" def="$2" hint ans
+  case "$def" in 1) hint="[Y/n]";; *) hint="[y/N]";; esac
+  while :; do
+    printf '%s %s ' "$prompt" "$hint" >/dev/tty
+    IFS= read -r ans </dev/tty || ans=""
+    [ -z "$ans" ] && ans="$def"
+    case "$ans" in [Yy]*|1) echo 1; return;; [Nn]*|0) echo 0; return;; esac
+  done
+}
+
+# Merge id=val lines from stdin with existing answers (existing wins), write back.
+write_choices() {
+  local tmp; tmp="$(mktemp)"
+  { [ -f "$choices" ] && grep -E '^[^#].*=' "$choices"; cat; } 2>/dev/null \
+    | awk -F= '!seen[$1]++' | sort >"$tmp"
+  {
+    echo "# Auto-written by run_before_05-pick-packages -- <id>=1 (install) /"
+    echo "# <id>=0 (skip) per optional package. Edit to change; delete to re-adopt."
+    cat "$tmp"
+  } >"$choices"
+  rm -f "$tmp"
+  chmod 600 "$choices"
+}
+
+mkdir -p "$(dirname "$choices")"
+
+any_installed=0
+while IFS='|' read -r m type arg; do
+  [ -n "$m" ] && is_installed "$type" "$arg" && any_installed=1
+done <<EOF
+$probe
+EOF
+
+# Existing machine, first contact: adopt the current install state silently.
+if [ ! -f "$choices" ] && [ "$any_installed" -eq 1 ]; then
+  while IFS='|' read -r m type arg; do
+    [ -n "$m" ] || continue
+    if is_installed "$type" "$arg"; then echo "$m=1"; else echo "$m=0"; fi
+  done <<EOF | write_choices
+$probe
+EOF
+  n="$(grep -c '=1$' "$choices" 2>/dev/null || true)"
+  echo "[pick] adopted ${n:-0} already-installed optional app(s); edit $choices to change"
+  exit 0
+fi
+
+# From here we must prompt, which needs a terminal. Without one, leave the
+# unanswered apps for the next interactive apply.
+[ -t 0 ] && [ -t 1 ] || exit 0
+
+if [ ! -f "$choices" ]; then
+  # Fresh machine: walk the groups so you choose what to install.
+  printf '\nChoose optional apps to install on this machine (baseline always installs).\n' >/dev/tty
+  printf '%s\n' "$catalogue" | while IFS='|' read -r key label members; do
+    [ -n "$key" ] || continue
+    members="$(printf '%s' "$members" | tr ',' ' ')"
+    printf '\n' >/dev/tty
+    if [ "$(ask_yn "$label?" 0)" = 0 ]; then
+      for mm in $members; do echo "$mm=0"; done
+      continue
+    fi
+    printf 'All of "%s", or pick individually? [A/p] ' "$label" >/dev/tty
+    IFS= read -r mode </dev/tty || mode=""
+    case "$mode" in
+      [Pp]*) for mm in $members; do echo "$mm=$(ask_yn "  $mm?" 0)"; done ;;
+      *)     for mm in $members; do echo "$mm=1"; done ;;
+    esac
+  done | write_choices
+else
+  # Established machine: ask about each newly added optional app, one at a time.
+  printf '\nNew optional app(s) available:\n' >/dev/tty
+  for m in $unanswered; do
+    row="$(printf '%s\n' "$probe" | grep "^${m}|")"
+    def=0
+    is_installed "$(printf '%s' "$row" | cut -d'|' -f2)" "$(printf '%s' "$row" | cut -d'|' -f3)" && def=1
+    echo "$m=$(ask_yn "  install '$m'?" "$def")"
+  done | write_choices
+fi
+{{ end -}}
