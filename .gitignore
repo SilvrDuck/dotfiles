@@ -1,3 +1,4 @@
 .DS_Store
 .env
 .gitleaks.local.toml
+.claude/scheduled_tasks.lock
