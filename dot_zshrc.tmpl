@@ -45,6 +45,13 @@ zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}'  # case-insensitive
 # Drop env vars from command-position completion.
 zstyle ':completion:*:-command-:*' tag-order 'commands functions builtins reserved-words aliases'
 zstyle ':fzf-tab:*' fzf-flags --height=40% --reverse --border
+# Seed fzf only from the common prefix of the shown candidates, not from zsh's
+# raw PREFIX. The default (prefix input first) falls back to `input` when the
+# displays share no common prefix (e.g. bare `dir/<TAB>` listings); for carapace
+# completions PREFIX still holds the directory path (carapace shows bare names
+# but inserts full paths), so `input` seeds `skills/`, matches no display, and
+# the list shows 0 results. `prefix` derives the query from the displayed text.
+zstyle ':fzf-tab:*' query-string prefix
 
 # -----------------------------------------------------------------------------
 # Antidote phase 1
