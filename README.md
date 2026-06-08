@@ -105,10 +105,12 @@ macOS only. AeroSpace tiles windows with ⌥ as the "Super" key; AltTab switches
 3. Launch AutoRaise → grant **Accessibility**. Settings: uncheck *Require mouse to stop moving before raise/focus*; *Poll interval* → 20.
 4. Keymap lives in `~/.config/aerospace/aerospace.toml`; app launchers are ⌥⇧ + letter, and ⌥⇧; enters service mode (Esc reloads the config).
 5. Launch Ice → enable launch-at-login. Its menu bar layout is per-machine, not synced.
+6. **Android hotspot trigger**: ⌃⌥⌘B runs `android-hotspot start` — bound in the AeroSpace config, no manual key setup. Per machine: opt into the *Phone tethering* group at the package picker (installs `blueutil`), run `android-hotspot setup` (stores the phone's Bluetooth address, SSID, password in Keychain), and grant **AeroSpace** Bluetooth access under Privacy & Security → Bluetooth — the hotkey-launched `blueutil` is blocked without it (it works from a terminal only because the terminal already holds that grant). Phone side: see Guides.
 
 ## Guides
 
 Rare manual procedures, documented not automated.
 
 - [Crisp HiDPI scaling on external displays (Tahoe + BetterDisplay)](guides/tahoe-hidpi-betterdisplay.md)
+- [Android Wi-Fi hotspot from macOS (Bluetooth)](guides/android-hotspot-bluetooth-setup.md)
 

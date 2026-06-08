@@ -171,6 +171,11 @@ alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS
 alt-shift-cmd-g = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp WhatsApp https://web.whatsapp.com/'
 alt-shift-cmd-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://ksuite.infomaniak.com/all/mail/'''
 
+# Android hotspot: bounce Bluetooth so the phone's Tasker profile
+# starts its hotspot, then join it. Runs the script directly (no Raycast).
+# Per-machine setup + phone side: guides/android-hotspot-bluetooth-setup.md.
+alt-ctrl-cmd-b = 'exec-and-forget $HOME/.local/bin/android-hotspot start'
+
 # Service mode: reload config, flatten layout, toggle float, close others
 alt-shift-semicolon = 'mode service'
 

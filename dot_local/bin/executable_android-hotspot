@@ -1,0 +1,132 @@
+#!/usr/bin/env bash
+# Start an Android phone's Wi-Fi hotspot from this Mac, then join it.
+#
+# The trigger path is Bluetooth, so the phone can stay in your pocket: the Mac
+# bounces a Bluetooth connection to the phone, a Tasker "BT Connected" profile
+# on the phone fires the soft-AP broadcast, the hotspot comes up, and macOS
+# joins it. (Phone-side Tasker/Delta/Shizuku setup:
+# guides/android-hotspot-bluetooth-setup.md.)
+#
+# Per-machine values live in the macOS login Keychain — never in this repo or
+# the shell env, since a Shortcut / Spotlight launch does not source your zshrc:
+#   service AndroidHotspotBT   -> phone's Bluetooth address (from blueutil --paired)
+#   service AndroidHotspotSSID -> hotspot SSID
+#   service AndroidHotspotWiFi -> hotspot password
+# Run `android-hotspot setup` once to populate them.
+#
+# Usage: android-hotspot start|wifi|setup
+
+set -euo pipefail
+
+# Launchers like AeroSpace's exec-and-forget, Shortcuts, and launchd run with a
+# minimal PATH that omits Homebrew, so blueutil would not be found. Prepend the
+# Homebrew bin dirs (Apple Silicon first, then Intel) so this works under any
+# launcher, not just an interactive shell.
+for p in /opt/homebrew/bin /usr/local/bin; do
+  if [[ -d "$p" && ":$PATH:" != *":$p:"* ]]; then
+    PATH="$p:$PATH"
+  fi
+done
+export PATH
+
+KC_BT_SERVICE="${ANDROID_HOTSPOT_BT_SERVICE:-AndroidHotspotBT}"
+KC_SSID_SERVICE="${ANDROID_HOTSPOT_SSID_SERVICE:-AndroidHotspotSSID}"
+KC_PASS_SERVICE="${ANDROID_HOTSPOT_KEYCHAIN_SERVICE:-AndroidHotspotWiFi}"
+
+prog="$(basename "$0")"
+
+usage() { echo "Usage: $prog start|wifi|setup" >&2; }
+
+# macOS notification — a hotkey / Shortcut launch has no terminal, so this is
+# the only feedback there. The message is passed as an argv item rather than
+# interpolated into the AppleScript, so an SSID with quotes can't break it.
+notify() {
+  osascript - "$1" >/dev/null 2>&1 <<'OSA' || true
+on run argv
+  display notification (item 1 of argv) with title "Android hotspot"
+end run
+OSA
+}
+
+# Audible cue — works from any launcher and ignores Focus, so it is the reliable
+# signal when notification banners are suppressed or undelivered (needs unmuted).
+chime() { afplay "/System/Library/Sounds/$1.aiff" >/dev/null 2>&1 || true; }
+
+# Fail on every channel: stderr, a banner, and the failure chime.
+die() { echo "$1" >&2; notify "$1"; chime Basso; exit 1; }
+
+require_blueutil() {
+  command -v blueutil >/dev/null 2>&1 \
+    || die "blueutil not found — brew install blueutil (or opt into Phone tethering)"
+}
+
+kc_get() { security find-generic-password -a "$USER" -s "$1" -w 2>/dev/null; }
+
+wifi_device() {
+  networksetup -listallhardwareports | awk '
+    /Hardware Port: Wi-Fi|Hardware Port: AirPort/ { getline; print $2; exit }
+  '
+}
+
+setup() {
+  local bt ssid pass
+  read -r -p "Phone Bluetooth address (from blueutil --paired): " bt
+  read -r -p "Hotspot SSID: " ssid
+  read -r -s -p "Hotspot password: " pass; echo
+  [[ -n "$bt" && -n "$ssid" && -n "$pass" ]] \
+    || { echo "Bluetooth address, SSID, and password are all required." >&2; exit 1; }
+  security add-generic-password -U -a "$USER" -s "$KC_BT_SERVICE" -w "$bt"
+  security add-generic-password -U -a "$USER" -s "$KC_SSID_SERVICE" -w "$ssid"
+  security add-generic-password -U -a "$USER" -s "$KC_PASS_SERVICE" -w "$pass"
+  echo "Stored Bluetooth address, SSID, and password in the login Keychain."
+}
+
+trigger_bluetooth() {
+  require_blueutil
+  local bt
+  bt="$(kc_get "$KC_BT_SERVICE")" \
+    || die "No Bluetooth address in Keychain — run: $prog setup"
+  blueutil --power 1 \
+    || die "Bluetooth blocked — grant the launching app access in System Settings > Privacy & Security > Bluetooth"
+  # Tasker's "BT Connected" profile fires on a fresh connect, so bounce the
+  # link: drop it if it is already up, then reconnect.
+  blueutil --disconnect "$bt" >/dev/null 2>&1 || true
+  sleep 1
+  blueutil --connect "$bt" >/dev/null 2>&1 || true
+}
+
+connect_wifi() {
+  local iface net pass
+  iface="$(wifi_device)"
+  [[ -n "$iface" ]] || die "No macOS Wi-Fi interface found"
+  net="$(kc_get "$KC_SSID_SERVICE")" \
+    || die "No hotspot SSID in Keychain — run: $prog setup"
+  pass="$(kc_get "$KC_PASS_SERVICE")" \
+    || die "No hotspot password in Keychain — run: $prog setup"
+  networksetup -setairportpower "$iface" on || true
+  # The hotspot can take a while to appear after the phone is triggered, so poll
+  # the join. networksetup -setairportnetwork exits 0 even on failure (it only
+  # prints "Could not find network ..."), so trust its output, not the exit code.
+  local i out
+  for i in {1..20}; do
+    out="$(networksetup -setairportnetwork "$iface" "$net" "$pass" 2>&1)"
+    if [[ -z "$out" ]]; then
+      echo "Joined hotspot: $net"
+      notify "Joined $net"
+      chime Glass
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Failed to join hotspot: $net — $out" >&2
+  notify "Couldn't reach hotspot $net"
+  chime Basso
+  exit 1
+}
+
+case "${1:-}" in
+  start) notify "Connecting…"; chime Tink; trigger_bluetooth; echo "Waiting for the hotspot to come up..."; connect_wifi ;;
+  wifi)  connect_wifi ;;
+  setup) setup ;;
+  *)     usage; exit 2 ;;
+esac

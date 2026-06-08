@@ -94,6 +94,10 @@ packages:
       packages:
         - d2
         - plantuml
+    phone-tethering:
+      label: Phone tethering
+      packages:
+        - blueutil
 
   overrides:
     gh:
@@ -228,4 +232,9 @@ packages:
     jordanbaird-ice:
       # Ice — menu bar manager (macOS only).
       darwin_kind: cask
+      linux_skip: true
+
+    blueutil:
+      # macOS Bluetooth CLI that drives the hotspot trigger
+      # (~/.local/bin/android-hotspot); no Linux build.
       linux_skip: true
