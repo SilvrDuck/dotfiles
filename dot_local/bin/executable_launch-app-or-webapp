@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# launch-app-or-webapp — prefer a native desktop app, else a chromeless Omarchy
+# web-app window. Mirrors the AeroSpace helper of this name. `command -v` is the
+# install probe; focus-or-launch (ours) and omarchy-launch-or-focus-webapp
+# (Omarchy's) do the real work.
+#
+# Usage: launch-app-or-webapp <command> <wm-class> <web-title> <url>
+if command -v "$1" >/dev/null 2>&1; then
+  exec focus-or-launch "$2" uwsm-app -- "$1"
+fi
+exec omarchy-launch-or-focus-webapp "$3" "$4"

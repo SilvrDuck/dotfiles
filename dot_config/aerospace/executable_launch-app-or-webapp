@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# launch-app-or-webapp — prefer the native macOS app; else a chromeless web-app
+# window. `open -a` is focus-or-launch and exits nonzero (launching nothing)
+# when the app is absent, so the launch attempt IS the install probe: no extra
+# check, no delay when the app is present. Mirrors the hypr helper of this name.
+#
+# Usage: launch-app-or-webapp <AppName> <web-title-pattern> <url>
+open -a "$1" 2>/dev/null && exit 0
+exec "$HOME/.config/aerospace/launch-or-focus-webapp" "$2" "$3"
