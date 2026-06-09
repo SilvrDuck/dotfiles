@@ -12,7 +12,7 @@ On a fresh Mac, run first and wait for it to finish:
 xcode-select --install
 ```
 
-Then (`sudo -v` caches your password so Homebrew's non-interactive install can use it — don't prefix the rest with `sudo`):
+Then:
 
 ```sh
 sudo -v && sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
