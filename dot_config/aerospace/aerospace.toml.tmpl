@@ -138,11 +138,9 @@ alt-shift-t = 'exec-and-forget open -a "Activity Monitor"'
 alt-shift-g = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Telegram Telegram https://web.telegram.org/a/'
 alt-shift-m = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Spotify Spotify https://open.spotify.com'
 alt-shift-s = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Slack Slack https://app.slack.com/client'
-# Steam and Passwords have no web equivalent, so plain open -a — a no-op until
-# the app is installed, letting the binding ship ahead of install. Passwords is
-# on alt-shift-slash since bare alt-slash already cycles the tiling layout.
+# Steam has no web equivalent, so plain open -a — a no-op until the app is
+# installed, letting the binding ship ahead of install.
 alt-shift-cmd-s = 'exec-and-forget open -a Steam'
-alt-shift-slash = 'exec-and-forget open -a Bitwarden'
 # Claude desktop app by bundle id, not name — `open -a Claude` would fuzzy-match
 # the "Claude Code URL Handler" helper; the bundle id targets Claude.app exactly.
 alt-shift-cmd-a = 'exec-and-forget open -b com.anthropic.claudefordesktop'
