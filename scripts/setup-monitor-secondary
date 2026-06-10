@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'HELP'
+setup-monitor-secondary
+
+Interactively pick which currently-connected monitor is the "secondary" and
+record it as monitor_secondary in the local chezmoi config:
+  ~/.config/chezmoi/chezmoi.toml  ([data] block, machine-local, unsynced)
+
+The value pins a workspace to that screen by role, not by port, so it survives
+dock/undock:
+  macOS (AeroSpace) - workspace 5 pins to monitor_secondary (a monitor-name regex).
+  Linux (Hyprland)  - workspaces 3/4 pin to monitor_secondary (a monitor desc:).
+
+'main' (the macOS Main display / hypr monitor_main) and the laptop 'built-in'
+panel already have automatic roles; this only sets the extra screen. Pick
+"none" to unset it, so its workspace falls back to the focused monitor.
+
+After writing, the script runs `chezmoi apply` for the affected file and reloads
+the window manager so the change is live immediately.
+HELP
+  exit 0
+fi
+
+config="$HOME/.config/chezmoi/chezmoi.toml"
+key="monitor_secondary"
+
+if [[ ! -f "$config" ]]; then
+  echo "No chezmoi config at $config - run 'chezmoi init' first."
+  exit 1
+fi
+
+# Insert or replace `monitor_secondary = '<value>'` under [data]. TOML single
+# quotes are literal, so monitor names need no escaping. If the key is absent it
+# goes right after the [data] header; if even that is missing, append a block.
+set_data() {
+  local val="$1" line tmp
+  line="$key = '$val'"
+  tmp="$(mktemp)"
+  if grep -qE "^[[:space:]]*${key}[[:space:]]*=" "$config"; then
+    awk -v key="$key" -v repl="$line" \
+      '$0 ~ "^[[:space:]]*"key"[[:space:]]*=" { print repl; next } { print }' \
+      "$config" >"$tmp"
+  elif grep -qE '^\[data\]' "$config"; then
+    awk -v repl="$line" '{ print } /^\[data\]/ && !ins { print repl; ins=1 }' \
+      "$config" >"$tmp"
+  else
+    cp "$config" "$tmp"
+    printf '[data]\n%s\n' "$line" >>"$tmp"
+  fi
+  mv "$tmp" "$config"
+}
+
+# Drop the monitor_secondary line entirely (|| true: grep exits 1 on no match).
+unset_data() {
+  local tmp
+  tmp="$(mktemp)"
+  grep -vE "^[[:space:]]*${key}[[:space:]]*=" "$config" >"$tmp" || true
+  mv "$tmp" "$config"
+}
+
+labels=()
+values=()
+apply_target=""
+
+case "$(uname -s)" in
+  Darwin)
+    # The fork installs the CLI to ~/.local/bin (first on PATH); fall back to
+    # the Homebrew path for a minimal PATH (e.g. launched from a GUI context).
+    as=""
+    for c in aerospace "$HOME/.local/bin/aerospace" /opt/homebrew/bin/aerospace; do
+      if command -v "$c" >/dev/null 2>&1 || [[ -x "$c" ]]; then as="$c"; break; fi
+    done
+    [[ -n "$as" ]] || { echo "aerospace CLI not found."; exit 1; }
+
+    # `list-monitors` prints "<n> | <name>"; the name is what AeroSpace matches.
+    while IFS= read -r mline; do
+      [[ -n "$mline" ]] || continue
+      name="${mline#*| }"
+      label="$name"
+      case "$name" in *[Bb]uilt-in*) label="$name  (laptop built-in)" ;; esac
+      labels+=("$label")
+      values+=("$name")
+    done < <("$as" list-monitors)
+
+    apply_target="$HOME/.config/aerospace/aerospace.toml"
+    reload() { "$as" reload-config; }
+    ;;
+
+  Linux)
+    for tool in hyprctl jq; do
+      command -v "$tool" >/dev/null 2>&1 || { echo "$tool is required."; exit 1; }
+    done
+
+    # Hyprland pins by `desc:`, so store the full description; show name + desc.
+    while IFS=$'\t' read -r name desc; do
+      labels+=("$name - $desc")
+      values+=("$desc")
+    done < <(hyprctl -j monitors | jq -r '.[] | "\(.name)\t\(.description)"')
+
+    apply_target="$HOME/.config/hypr/workspaces.conf"
+    reload() { hyprctl reload; }
+    ;;
+
+  *)
+    echo "Unsupported OS."
+    exit 1
+    ;;
+esac
+
+if [[ "${#labels[@]}" -eq 0 ]]; then
+  echo "No monitors detected."
+  exit 1
+fi
+
+echo "Connected monitors ('main' and 'built-in' already have automatic roles):"
+i=1
+for label in "${labels[@]}"; do
+  printf '  %d) %s\n' "$i" "$label"
+  i=$((i + 1))
+done
+printf '  0) none - unset (workspace falls back to the focused monitor)\n'
+printf 'Pick the secondary monitor [0-%d]: ' "${#labels[@]}"
+read -r choice
+
+case "$choice" in
+  '' | *[!0-9]*) echo "Not a number." >&2; exit 1 ;;
+esac
+if [[ "$choice" -gt "${#labels[@]}" ]]; then
+  echo "Out of range." >&2
+  exit 1
+fi
+
+if [[ "$choice" -eq 0 ]]; then
+  unset_data
+  echo "[monitor] unset $key"
+else
+  value="${values[$((choice - 1))]}"
+  set_data "$value"
+  echo "[monitor] $key = '$value'"
+fi
+
+echo "[monitor] applying chezmoi change to $apply_target"
+chezmoi apply "$apply_target"
+echo "[monitor] reloading window manager"
+reload
+echo "[monitor] done"

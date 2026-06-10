@@ -31,6 +31,7 @@ $(chezmoi source-path)/scripts/setup-api-keys
 $(chezmoi source-path)/scripts/setup-keyboard-layout
 $(chezmoi source-path)/scripts/setup-cli-logins
 $(chezmoi source-path)/scripts/setup-gitleaks-local
+$(chezmoi source-path)/scripts/setup-monitor-secondary
 ```
 
 ## Devcontainers
