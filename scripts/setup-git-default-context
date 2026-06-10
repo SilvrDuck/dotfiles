@@ -90,6 +90,24 @@ if [[ -n "$src" ]] && pushd "$src" >/dev/null 2>&1; then
   popd >/dev/null
 fi
 
+# Same idea for the SilvrDuck skills external: chezmoi clones it over anonymous
+# HTTPS (so a key-less first apply still works) and keeps pulling it that way,
+# so switch only its *push* URL to SSH — fetch stays HTTPS. Skip if not cloned.
+skills="$HOME/.local/share/silvrduck-skills"
+if [[ -d "$skills/.git" ]]; then
+  fetch="$(git -C "$skills" remote get-url origin 2>/dev/null || true)"
+  push="$(git -C "$skills" remote get-url --push origin 2>/dev/null || true)"
+  case "$fetch" in
+    https://github.com/*)
+      want="git@github.com:${fetch#https://github.com/}"
+      if [[ "$push" != "$want" ]]; then
+        git -C "$skills" remote set-url --push origin "$want"
+        echo "Switched skills external push to SSH: $want"
+      fi
+      ;;
+  esac
+fi
+
 cat <<EOF2
 
 Default Git context created.
