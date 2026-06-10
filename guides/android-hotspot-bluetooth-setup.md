@@ -16,8 +16,9 @@
    ```
 
    Leave Cat, Mime Type, Data, Extra empty. Save.
-6. **Tasker → Profiles → + → State → Net → BT Connected**, pick the Mac (by device/address). Attach it to *Start Hotspot*. Add no exit task.
-7. **Settings → Apps**, set **Tasker**, **Delta**, **Shizuku** → Battery → **Unrestricted**.
+6. **Tasker → Tasks → +**, name it *Stop Hotspot*, add the same **System → Send Intent** as above but with `Action: dev.shadoe.delta.action.STOP_SOFT_AP` (package, class, and target identical). Save.
+7. **Tasker → Profiles → + → State → Net → BT Connected**, pick the Mac (by device/address). Attach *Start Hotspot* as the entry task, then long-press it → **Add Exit Task** → *Stop Hotspot*. The Mac turns Bluetooth off when it sleeps (`bt-sleep`), so closing the lid drops the BT link, the profile goes false, and the exit task stops the hotspot — no waiting on the phone's idle-timer.
+8. **Settings → Apps**, set **Tasker**, **Delta**, **Shizuku** → Battery → **Unrestricted**. (Delta must stay alive in the background for `STOP_SOFT_AP` to fire — unlike `START`.)
 
 ## Mac
 
