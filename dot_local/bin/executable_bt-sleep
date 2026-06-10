@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Turn Bluetooth off when the Mac sleeps and back on when it wakes. Invoked by
+# the com.dotfiles.bluetooth-sleep LaunchAgent, which runs sleepwatcher with
+# `-s "bt-sleep sleep"` / `-w "bt-sleep wake"`.
+#
+# This replaces Bluesnooze, which is defunct on macOS 26 (Tahoe): its private
+# Bluetooth API broke, so it no longer toggles power. blueutil's power toggle
+# still works there (and never touches `--disconnect`, which can hang on 26).
+#
+# Usage: bt-sleep sleep|wake   (normally only the LaunchAgent calls this)
+
+set -euo pipefail
+
+# launchd / sleepwatcher run with a minimal PATH that omits Homebrew, so
+# blueutil would not be found. Prepend the Homebrew bin dirs (Apple Silicon
+# first, then Intel) so this works under the agent, not just a login shell.
+for p in /opt/homebrew/bin /usr/local/bin; do
+  if [[ -d "$p" && ":$PATH:" != *":$p:"* ]]; then
+    PATH="$p:$PATH"
+  fi
+done
+export PATH
+
+# No blueutil (Bluetooth tooling not installed) -> nothing to toggle.
+command -v blueutil >/dev/null 2>&1 || exit 0
+
+case "${1:-}" in
+  sleep) blueutil --power 0 ;;
+  wake)  blueutil --power 1 ;;
+  *)     echo "Usage: $(basename "$0") sleep|wake" >&2; exit 2 ;;
+esac

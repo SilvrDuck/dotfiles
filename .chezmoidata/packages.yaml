@@ -42,6 +42,8 @@ packages:
       - xh
       - sbb-tui
       - kanban-md
+      - blueutil
+      - sleepwatcher
 
     nvim:
       - neovim
@@ -94,10 +96,6 @@ packages:
       packages:
         - d2
         - plantuml
-    phone-tethering:
-      label: Phone tethering
-      packages:
-        - blueutil
 
   overrides:
     gh:
@@ -235,6 +233,12 @@ packages:
       linux_skip: true
 
     blueutil:
-      # macOS Bluetooth CLI that drives the hotspot trigger
-      # (~/.local/bin/android-hotspot); no Linux build.
+      # macOS Bluetooth CLI behind two features: the hotspot trigger
+      # (~/.local/bin/android-hotspot) and the sleep/wake power toggle
+      # (~/.local/bin/bt-sleep). Baseline on Mac; no Linux build.
+      linux_skip: true
+
+    sleepwatcher:
+      # macOS sleep/wake daemon driving the Bluetooth-on-sleep LaunchAgent
+      # (~/.local/bin/bt-sleep). Baseline on Mac; no Linux build.
       linux_skip: true
