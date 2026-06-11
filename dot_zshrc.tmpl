@@ -289,6 +289,7 @@ clank() {
 
 claude() { command claude --effort xhigh "$@"; }           # default xhigh; --effort wins
 command -v claude >/dev/null && alias cc='claude' ccc='claude --continue'
+scratch() { cd ~/scratch && claude "$@"; }                 # claude in scratch dir
 
 # -----------------------------------------------------------------------------
 # Update notices — passive, never run anything. The only network touch is a
