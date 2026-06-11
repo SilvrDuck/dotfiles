@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Upgrade all installed programs to latest. Runs on every `chezmoi apply` (so
-# every `chezmoi update` too), but self-gates to at most once per 24h via a
+# every `chezmoi update` too), but self-gates to at most once per week via a
 # stamp. The same stamp drives the "no upgrade in the last week" reminder in
 # dot_zshrc.tmpl. Best-effort: every step is `|| echo …` and never aborts the
 # apply.
@@ -10,8 +10,8 @@ exit 0
 {{ end -}}
 stamp="$HOME/.cache/dotfiles/upgrade.stamp"
 mkdir -p "${stamp%/*}"
-if [ -f "$stamp" ] && [ -n "$(find "$stamp" -mmin -1440 2>/dev/null)" ]; then
-  echo "[upgrade] skipped (upgraded <24h ago)"
+if [ -f "$stamp" ] && [ -n "$(find "$stamp" -mtime -7 2>/dev/null)" ]; then
+  echo "[upgrade] skipped (upgraded <1 week ago)"
   exit 0
 fi
 
