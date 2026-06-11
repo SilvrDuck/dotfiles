@@ -64,6 +64,10 @@ if command -v pi >/dev/null 2>&1; then
   fi
 fi
 
+if command -v codex >/dev/null 2>&1; then
+  curl -fsSL https://chatgpt.com/codex/install.sh | sh || echo "[codex] update skipped or failed"
+fi
+
 if command -v uv >/dev/null 2>&1; then
   uv self update || echo "[uv] update skipped or failed"
 fi

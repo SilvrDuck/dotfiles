@@ -32,6 +32,9 @@ fi
 if pkg_chosen "pi"; then
   install_pi
 fi
+if pkg_chosen "codex"; then
+  command -v codex >/dev/null 2>&1 || curl -fsSL https://chatgpt.com/codex/install.sh | sh || true
+fi
 
 # uv: official installer. Graphify needs it; generally useful for Python work.
 command -v uv >/dev/null 2>&1 || curl -fsSL https://astral.sh/uv/install.sh | sh || true

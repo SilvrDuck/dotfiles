@@ -64,6 +64,7 @@ packages:
         - claude-cli
         - opencode
         - pi
+        - codex
     containers:
       label: Containers
       packages:

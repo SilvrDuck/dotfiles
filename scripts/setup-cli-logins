@@ -13,6 +13,7 @@ Covered:
   GitLab      - glab auth login
   Claude Code - claude /login
   Pi          - pi /login
+  Codex       - codex login
   Context7    - npx ctx7 setup   (MCP, browser OAuth)
 HELP
   exit 0
@@ -25,6 +26,7 @@ setup-cli-logins will offer to log into:
   - GitLab        (`glab auth login`)
   - Claude Code   (`claude /login`)
   - Pi            (`pi /login`)
+  - Codex         (`codex login`)
   - Context7 MCP  (`npx ctx7 setup`)
 
 Single-key answers: press y or n (no Enter needed).
@@ -53,12 +55,14 @@ login_gh()       { require_cmd gh     "Install via packages.yaml first."     && 
 login_glab()     { require_cmd glab   "Install glab first (brew/pacman/apt)." && glab auth login; }
 login_claude()   { require_cmd claude "Reapply chezmoi to install via upstream-installers.sh." && claude /login; }
 login_pi()       { require_cmd pi     "Reapply chezmoi to install via upstream-installers.sh." && pi /login; }
+login_codex()    { require_cmd codex  "Reapply chezmoi to install via upstream-installers.sh." && codex login; }
 login_context7() { require_cmd npx    "Install Node (e.g. mise install node)." && npx ctx7 setup; }
 
 ask_run "GitHub"        login_gh
 ask_run "GitLab"        login_glab
 ask_run "Claude Code"   login_claude
 ask_run "Pi"            login_pi
+ask_run "Codex"         login_codex
 ask_run "Context7 MCP"  login_context7
 
 echo "Done."
