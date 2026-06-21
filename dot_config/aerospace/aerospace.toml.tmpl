@@ -173,6 +173,12 @@ alt-shift-cmd-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/M
 # Per-machine setup + phone side: guides/android-hotspot-bluetooth-setup.md.
 alt-ctrl-cmd-b = 'exec-and-forget $HOME/.local/bin/android-hotspot start'
 
+# Media controls — mirror hypr SUPER+CTRL+P/[/]. Simulate hardware media keys
+# via AppleScript key codes: 100 = play-pause, 98 = previous, 101 = next.
+alt-ctrl-p = 'exec-and-forget osascript -e "tell application \"System Events\" to key code 100"'
+alt-ctrl-leftSquareBracket = 'exec-and-forget osascript -e "tell application \"System Events\" to key code 98"'
+alt-ctrl-rightSquareBracket = 'exec-and-forget osascript -e "tell application \"System Events\" to key code 101"'
+
 # Service mode: reload config, flatten layout, toggle float, close others
 alt-shift-semicolon = 'mode service'
 
