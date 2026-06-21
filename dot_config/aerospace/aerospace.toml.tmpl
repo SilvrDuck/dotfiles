@@ -146,9 +146,10 @@ alt-shift-f = '''exec-and-forget osascript -e 'tell application "Finder" to make
 alt-shift-n = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"nvim"}' '''
 
 # Same Ghostty-with-command pattern for Omarchy's TUI launchers — Docker
-# (lazydocker, SUPER+SHIFT+D) and the music TUI (cliamp, SUPER+SHIFT+ALT+M).
+# (lazydocker, SUPER+SHIFT+D).
 alt-shift-d = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"lazydocker"}' '''
-alt-shift-cmd-m = '''exec-and-forget osascript -e 'tell application "Ghostty" to new window with configuration {command:"cliamp"}' '''
+# Google Maps as a chromeless Chrome --app window. Mirrors hypr SUPER+SHIFT+ALT+M.
+alt-shift-cmd-m = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://www.google.com/maps'''
 
 # Web apps as chromeless Chrome --app windows. Gmail and Calendar launch-or-
 # focus: focus an existing window by a page-<title> substring (launch-or-focus-
