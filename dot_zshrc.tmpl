@@ -81,12 +81,17 @@ fi
 # -----------------------------------------------------------------------------
 
 autoload -Uz compinit                                      # load completion init
-if [[ -n ${ZDOTDIR:-$HOME}/.zcompdump(#qNmh+24) ]]; then
-  # Full audit + dump regen once a day.
-  compinit
+# Regen the dump at most once a day; fast-path otherwise. The glob qualifier
+# only fires in a command context (the array assignment) — it does NOT expand
+# inside [[ ]], where the operand is a literal string, so the old
+# `[[ -n …(#q…) ]]` guard was always true and every shell took the slow branch.
+zcd_stale=( ${ZDOTDIR:-$HOME}/.zcompdump(Nmh+24) )         # dump older than 24h?
+if (( $#zcd_stale )); then
+  compinit                                                 # stale: full regen
 else
-  compinit -C                                              # skip audit when dump is fresh
+  compinit -C                                              # fresh: skip audit
 fi
+unset zcd_stale
 
 # -----------------------------------------------------------------------------
 # Carapace
@@ -303,7 +308,7 @@ scratch() { cd ~/scratch && claude "$@"; }                 # claude in scratch d
 {{ if ne .machine_kind "devcontainer" -}}
 if command -v chezmoi >/dev/null; then
   () {
-    local src; src="$(chezmoi source-path 2>/dev/null)" || return
+    local src="{{ .chezmoi.sourceDir }}"                   # baked at apply time
     local cache="$HOME/.cache/dotfiles"
     mkdir -p "$cache"
 
