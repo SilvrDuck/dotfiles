@@ -79,15 +79,21 @@ setup() {
   security add-generic-password -U -a "$USER" -s "$KC_SSID_SERVICE" -w "$ssid"
   security add-generic-password -U -a "$USER" -s "$KC_PASS_SERVICE" -w "$pass"
   echo "Stored Bluetooth address, SSID, and password in the login Keychain."
-  # The phone's Tasker "BT Connected" profile matches one Mac at a time, so a
-  # new machine needs its own copy — remind the user, naming this Mac.
+  # The phone's Tasker "BT Connected" profile matches a list of devices, so a
+  # new machine just adds its address to that profile — remind the user, naming
+  # this Mac.
   local btname
   btname="$(scutil --get ComputerName 2>/dev/null || hostname)"
   cat <<EOF
 
-Phone side: clone the Tasker "BT Connected" hotspot profile and point its
-device at this Mac ("$btname") — the profile matches one Mac at a time, so
-each machine needs its own. See guides/android-hotspot-bluetooth-setup.md.
+Mac side: grant AeroSpace Bluetooth access:
+  1. Open System Settings > Privacy & Security > Bluetooth
+  2. Add /Applications/AeroSpace.app with the + button
+  3. macOS will likely ask you to quit & reopen AeroSpace for it to take effect
+
+Phone side: add this Mac ("$btname") to the Tasker "BT Connected" hotspot
+profile's device list — it matches multiple devices, so a new machine just
+appends its address. See guides/android-hotspot-bluetooth-setup.md.
 EOF
 }
 
