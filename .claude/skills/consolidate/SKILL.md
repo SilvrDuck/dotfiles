@@ -59,17 +59,17 @@ Filter out obvious system / transitive packages — only surface things a human 
 
 ### D. Claude settings triage — per-key, not per-file
 
-Claude Code mutates `~/.claude/settings.json` autonomously (permission grants, `/config` toggles, plugin enablement). The chezmoi-tracked source at `dot_claude/settings.json.tmpl` must stay **public-safe and intentional**, so this bucket is **per-key**, not per-file. Three live surfaces to compare:
+Claude Code mutates `~/.claude/settings.json` autonomously (permission grants, `/config` toggles, plugin enablement). The chezmoi-tracked desired set in `.chezmoidata/claude-settings.yaml` (the `claude_settings` block, deep-merged into the live file by `run_after_30-claude-settings.sh.tmpl`) must stay **public-safe and intentional**, so this bucket is **per-key**, not per-file. Three live surfaces to compare:
 
-1. `dot_claude/settings.json.tmpl` — tracked source, **public**.
-2. `~/.claude/settings.json` — live, gets overwritten by `chezmoi apply`.
+1. `.chezmoidata/claude-settings.yaml` (`claude_settings`) — tracked desired set, **public**.
+2. `~/.claude/settings.json` — live; `run_after_30-claude-settings.sh.tmpl` deep-merges the desired set into it on every apply (additive — keys you don't declare are left alone).
 3. `~/.claude/settings.local.json` — **untracked, machine-local**; Claude merges it at runtime.
 
 For every top-level key (and nested entry inside `enabledPlugins`, `extraKnownMarketplaces`, `permissions.*`, `env`, `hooks`, `mcpServers`, `sandbox`) that appears in the live file but **not** in the tracked source, propose one of:
 
-- **`promote`** — add to `dot_claude/settings.json.tmpl`. Only if **provably public-safe** AND useful on every machine kind. Run the same per-item privacy flag from Step 5.
+- **`promote`** — add to `.chezmoidata/claude-settings.yaml`. Only if **provably public-safe** AND useful on every machine kind. Run the same per-item privacy flag from Step 5.
 - **`demote`** — move into `~/.claude/settings.local.json` (untracked). Default for anything tied to employer, internal hosts, work-only plugin marketplaces, machine-specific paths, or anything you're not sure about. Consult the relevant memory notes for soft-disclosure terms specific to this machine.
-- **`drop`** — let `chezmoi apply` wipe it. Use for autonomous Claude mutations that are noise (one-off permission grants, ephemeral `/config` flips).
+- **`drop`** — leave it untracked. The additive merge never removes live keys, so a dropped entry simply stays in this machine's live file and is not carried to other machines. Use for autonomous Claude mutations that are noise (one-off permission grants, ephemeral `/config` flips).
 
 For every key already in `~/.claude/settings.local.json`, ask the inverse: is this still correctly local, or has it become public-safe enough to promote? Default answer: **leave it local**. Only promote with explicit user approval.
 
@@ -78,12 +78,12 @@ For every key already in `~/.claude/settings.local.json`, ask the inverse: is th
 **Plugins & marketplaces — special case (shallow-merge bug).** Claude Code does **not** deep-merge `enabledPlugins` or `extraKnownMarketplaces` between `settings.json` and `settings.local.json` — the tracked file fully replaces the local one for these two keys. So `demote` is **broken** for plugin/marketplace entries: moving them to `settings.local.json` silently disables them. To keep a plugin or marketplace working on this machine while keeping its name out of the public repo, use the **`privatize`** action instead:
 
 1. Append the entry under `[data.private_plugins]` or `[data.private_marketplaces.<name>]` in `~/.config/chezmoi/chezmoi.toml` (local, untracked).
-2. The tracked `dot_claude/settings.json.tmpl` already loops over those keys and renders the entries inline into the single `enabledPlugins` / `extraKnownMarketplaces` block, so the merge problem disappears.
+2. `run_after_30-claude-settings.sh.tmpl` already folds `private_plugins` / `private_marketplaces` from that file into the single `enabledPlugins` / `extraKnownMarketplaces` block it merges into the live settings, so the shallow-merge problem disappears.
 3. Strip any duplicate from `~/.claude/settings.local.json` once the template owns the entry.
 
 Use `privatize` for any plugin or marketplace whose **name itself** is a soft disclosure (employer marketplace, work-only plugin, internal codename). Use `promote` only when the plugin name is provably generic and useful on every machine kind. Use `drop` for one-off enablement noise.
 
-When scanning for new plugins enabled via the Claude Code UI, diff `~/.claude/plugins/installed_plugins.json` (runtime truth) against the union of `dot_claude/settings.json.tmpl`'s hardcoded list **and** `~/.config/chezmoi/chezmoi.toml`'s `private_plugins` — anything in the first but not the second is a candidate. Same logic for marketplaces vs `known_marketplaces.json`.
+When scanning for new plugins enabled via the Claude Code UI, diff `~/.claude/plugins/installed_plugins.json` (runtime truth) against the union of `.chezmoidata/claude-settings.yaml`'s `enabledPlugins` **and** `~/.config/chezmoi/chezmoi.toml`'s `private_plugins` — anything in the first but not the second is a candidate. Same logic for marketplaces vs `known_marketplaces.json`.
 
 If `~/.claude/settings.local.json` does not yet exist and the user has soft-disclosure terms to guard, point them at `scripts/setup-gitleaks-local` to harden the pre-commit hook.
 
