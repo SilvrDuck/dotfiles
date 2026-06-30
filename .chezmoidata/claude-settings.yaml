@@ -23,8 +23,13 @@ claude_settings:
     claude-code-setup@claude-plugins-official: true
     pyright-lsp@claude-plugins-official: true
     telegram@claude-plugins-official: true
+    humanizer@humanizer: true
   extraKnownMarketplaces:
     claude-plugins-official:
       source:
         source: github
         repo: anthropics/claude-plugins-official
+    humanizer:
+      source:
+        source: github
+        repo: blader/humanizer
