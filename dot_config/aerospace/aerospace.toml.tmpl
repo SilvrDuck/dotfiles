@@ -55,7 +55,8 @@ run = ['layout tiles']
 [mode.main.binding]
 
 # Window management. Fullscreen is on alt-semicolon, not alt-f — bare alt-f is
-# left free so EurKEY's AltGr+f (right Alt) composes; semicolon's AltGr is unused.
+# left free so EurKEY's AltGr+f (right Alt) composes; AeroSpace cannot tell the
+# two Alts apart, so binding alt-f would swallow the compose.
 alt-w = 'close'
 alt-semicolon = 'fullscreen'
 alt-slash = 'layout tiles horizontal vertical'
@@ -69,16 +70,18 @@ alt-equal = 'resize smart +50'
 # inter-window gap let AutoRaise focus the next window while the cursor was still
 # in the gap, and the warp then snapped it to that window's center. Attaching the
 # warp per-binding keeps it keyboard-driven. Cross-monitor follow still comes from
-# AeroSpace's default on-focused-monitor-changed. The 'move' binds below keep the
-# same window focused, so they get no warp.
+# AeroSpace's default on-focused-monitor-changed. The 'move' binds below warp
+# the cursor onto the moved window (force-center); without it the window slides
+# out from under a stationary cursor and AutoRaise grabs whatever ends up
+# beneath, sometimes flipping the workspace.
 alt-h = ['focus left', 'move-mouse window-lazy-center']
 alt-j = ['focus down', 'move-mouse window-lazy-center']
 alt-k = ['focus up', 'move-mouse window-lazy-center']
 alt-l = ['focus right', 'move-mouse window-lazy-center']
-alt-shift-h = 'move left'
-alt-shift-j = 'move down'
-alt-shift-k = 'move up'
-alt-shift-l = 'move right'
+alt-shift-h = ['move left', 'move-mouse window-force-center']
+alt-shift-j = ['move down', 'move-mouse window-force-center']
+alt-shift-k = ['move up', 'move-mouse window-force-center']
+alt-shift-l = ['move right', 'move-mouse window-force-center']
 
 # Join-with (alt-ctrl + vi keys): pull the focused window and the neighbor in
 # that direction into a shared tiling container — the i3-style way to build
@@ -96,24 +99,27 @@ alt-ctrl-l = 'join-with right'
 # AeroSpace cannot tell left- from right-Option, so any alt-6 binding would eat
 # it — the same concession already made for alt-f above. 1-5 pin per the
 # assignment block; 7-0 are unpinned scratch workspaces on the focused monitor.
-alt-1 = ['workspace 1', 'move-mouse window-lazy-center']
-alt-2 = ['workspace 2', 'move-mouse window-lazy-center']
-alt-3 = ['workspace 3', 'move-mouse window-lazy-center']
-alt-4 = ['workspace 4', 'move-mouse window-lazy-center']
-alt-5 = ['workspace 5', 'move-mouse window-lazy-center']
-alt-7 = ['workspace 7', 'move-mouse window-lazy-center']
-alt-8 = ['workspace 8', 'move-mouse window-lazy-center']
-alt-9 = ['workspace 9', 'move-mouse window-lazy-center']
-alt-0 = ['workspace 0', 'move-mouse window-lazy-center']
-alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1', 'move-mouse window-lazy-center']
-alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2', 'move-mouse window-lazy-center']
-alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3', 'move-mouse window-lazy-center']
-alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4', 'move-mouse window-lazy-center']
-alt-shift-5 = ['move-node-to-workspace 5', 'workspace 5', 'move-mouse window-lazy-center']
-alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7', 'move-mouse window-lazy-center']
-alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8', 'move-mouse window-lazy-center']
-alt-shift-9 = ['move-node-to-workspace 9', 'workspace 9', 'move-mouse window-lazy-center']
-alt-shift-0 = ['move-node-to-workspace 0', 'workspace 0', 'move-mouse window-lazy-center']
+# Switches warp to monitor-lazy-center, not window-center: AeroSpace miscenters
+# a window the instant it is revealed from another workspace and drops the
+# cursor in a screen corner (nikitabobko/AeroSpace#386).
+alt-1 = ['workspace 1', 'move-mouse monitor-lazy-center']
+alt-2 = ['workspace 2', 'move-mouse monitor-lazy-center']
+alt-3 = ['workspace 3', 'move-mouse monitor-lazy-center']
+alt-4 = ['workspace 4', 'move-mouse monitor-lazy-center']
+alt-5 = ['workspace 5', 'move-mouse monitor-lazy-center']
+alt-7 = ['workspace 7', 'move-mouse monitor-lazy-center']
+alt-8 = ['workspace 8', 'move-mouse monitor-lazy-center']
+alt-9 = ['workspace 9', 'move-mouse monitor-lazy-center']
+alt-0 = ['workspace 0', 'move-mouse monitor-lazy-center']
+alt-shift-1 = ['move-node-to-workspace 1', 'workspace 1', 'move-mouse monitor-lazy-center']
+alt-shift-2 = ['move-node-to-workspace 2', 'workspace 2', 'move-mouse monitor-lazy-center']
+alt-shift-3 = ['move-node-to-workspace 3', 'workspace 3', 'move-mouse monitor-lazy-center']
+alt-shift-4 = ['move-node-to-workspace 4', 'workspace 4', 'move-mouse monitor-lazy-center']
+alt-shift-5 = ['move-node-to-workspace 5', 'workspace 5', 'move-mouse monitor-lazy-center']
+alt-shift-7 = ['move-node-to-workspace 7', 'workspace 7', 'move-mouse monitor-lazy-center']
+alt-shift-8 = ['move-node-to-workspace 8', 'workspace 8', 'move-mouse monitor-lazy-center']
+alt-shift-9 = ['move-node-to-workspace 9', 'workspace 9', 'move-mouse monitor-lazy-center']
+alt-shift-0 = ['move-node-to-workspace 0', 'workspace 0', 'move-mouse monitor-lazy-center']
 
 # New terminal window in the *existing* Ghostty instance, via Ghostty 1.3+
 # native AppleScript. Not `open -n -a Ghostty`: -n spawns a second app
@@ -187,8 +193,12 @@ alt-ctrl-p = 'exec-and-forget osascript -e "tell application \"System Events\" t
 alt-ctrl-leftSquareBracket = 'exec-and-forget osascript -e "tell application \"System Events\" to key code 98"'
 alt-ctrl-rightSquareBracket = 'exec-and-forget osascript -e "tell application \"System Events\" to key code 101"'
 
-# Service mode: reload config, flatten layout, toggle float, close others
-alt-shift-semicolon = 'mode service'
+# Service mode: reload config, flatten layout, toggle float, close others. Bound
+# to alt-shift-cmd-semicolon, not the default alt-shift-semicolon: EurKEY types ·
+# on AltGr+shift+; and AeroSpace cannot tell AltGr from left Alt, so the default
+# chord would silently trap you here, where backspace closes every other window.
+# Cmd disambiguates.
+alt-shift-cmd-semicolon = 'mode service'
 
 [mode.service.binding]
 esc = ['reload-config', 'mode main']
