@@ -104,21 +104,23 @@ trigger_bluetooth() {
     || die "No Bluetooth address in Keychain — run: $prog setup"
   blueutil --power 1 \
     || die "Bluetooth blocked — grant the launching app access in System Settings > Privacy & Security > Bluetooth"
-  # Tasker's "BT Connected" profile fires on a fresh connect, so bounce the
-  # link: drop it if it is already up, then reconnect. On macOS 26 `blueutil
-  # --disconnect` of a live link never returns (the IOBluetooth completion
-  # callback does not fire) though the drop still takes effect, so run it
-  # detached and cap the wait — never block on the call. An already-down link
-  # trips the is-connected check on the first pass, so this stays instant on
-  # older macOS too.
-  blueutil --disconnect "$bt" >/dev/null 2>&1 &
-  local dpid=$!
-  for _ in {1..8}; do
-    [[ "$(blueutil --is-connected "$bt" 2>/dev/null)" == 0 ]] && break
-    sleep 0.25
-  done
-  kill "$dpid" 2>/dev/null || true
-  sleep 1
+  # Tasker's "BT Connected" profile fires only on a fresh connect. If the link
+  # is already up, drop it and let the disconnect settle before reconnecting; if
+  # it is already down (the common case after sleep or idle), a plain connect is
+  # itself the fresh event, so skip the drop and its one-second settle. On macOS
+  # 26 `blueutil --disconnect` of a live link never returns (the IOBluetooth
+  # completion callback does not fire) though the drop still takes effect, so run
+  # it detached and cap the wait — never block on the call.
+  if [[ "$(blueutil --is-connected "$bt" 2>/dev/null)" == 1 ]]; then
+    blueutil --disconnect "$bt" >/dev/null 2>&1 &
+    local dpid=$!
+    for _ in {1..8}; do
+      [[ "$(blueutil --is-connected "$bt" 2>/dev/null)" == 0 ]] && break
+      sleep 0.25
+    done
+    kill "$dpid" 2>/dev/null || true
+    sleep 1
+  fi
   blueutil --connect "$bt" >/dev/null 2>&1 || true
 }
 
