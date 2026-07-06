@@ -77,6 +77,7 @@ packages:
         - obsidian
         - visual-studio-code
         - ghostty
+        - tailscale
     desktop-tools:
       label: Desktop & window management
       packages:
@@ -171,6 +172,13 @@ packages:
     visual-studio-code:
       darwin_kind: cask
       pacman_aur: visual-studio-code-bin
+
+    tailscale:
+      # The bare `tailscale` brew formula is only the CLI client; the desktop
+      # menu-bar app (bundling the daemon + network extension) is the cask.
+      # pacman's `tailscale` is the daemon + CLI, enabled via tailscaled.service.
+      darwin: tailscale-app
+      darwin_kind: cask
 
     watch:
       # Arch ships `watch` as part of procps-ng, not a standalone package.
