@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""Serendipity panel for terminal startup: one random Wikipedia article,
+drawn from the Good articles or Unusual articles pool.
+
+Relay cache: each render shows the article the previous terminal left in
+the cache, then restocks it with a detached background fetch for the
+next one — so rendering never waits on the network. Only the first
+render of a day (no cache dated today) fetches synchronously.
+
+Each render writes the article it displayed to a per-shell snapshot
+($WIKIDICE_ARTICLE) so `wop` always opens what is on screen, even after
+a restock has replaced the shared cache.
+
+Commands:
+    wikidice [render]    show the panel (default)
+    wikidice open        open this shell's article in the browser
+    wikidice restock     fetch a fresh article into the cache (internal)
+"""
+
+import datetime as dt
+import json
+import os
+import random
+import re
+import shutil
+import subprocess
+import sys
+import textwrap
+import time
+from pathlib import Path
+from urllib.parse import quote, unquote, urlparse
+from urllib.request import Request, urlopen
+
+UA = "wikidice/1.0 (personal terminal startup panel)"
+TIMEOUT = 4.0
+
+GOOD_RANDOM = "https://en.wikipedia.org/wiki/Special:RandomInCategory/Good_articles"
+UNUSUAL_PAGE = "https://en.wikipedia.org/wiki/Wikipedia:Unusual_articles"
+SUMMARY_API = "https://en.wikipedia.org/api/rest_v1/page/summary/"
+ARTICLE_BASE = "https://en.wikipedia.org/wiki/"
+
+CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", os.path.expanduser("~/.cache"))) / "wikidice"
+CACHE_FILE = CACHE_DIR / "cache.json"
+UNUSUAL_FILE = CACHE_DIR / "unusual-titles.json"
+RESTOCK_STAMP = CACHE_DIR / "restock.stamp"
+
+UNUSUAL_MAX_AGE = 30 * 86400
+SNAPSHOT_MAX_AGE = 86400
+RESTOCK_GATE = 10
+
+SUMMARY_LINES = 4
+
+DIM = "\033[2m"
+BOLD = "\033[1m"
+RESET = "\033[0m"
+
+
+def fetch(url):
+    req = Request(url, headers={"User-Agent": UA})
+    with urlopen(req, timeout=TIMEOUT) as resp:
+        return resp.read()
+
+
+def resolve_redirect(url):
+    # HEAD: the redirect target is the answer; the article body (which
+    # can be large enough to blow the timeout) is never transferred.
+    req = Request(url, headers={"User-Agent": UA}, method="HEAD")
+    with urlopen(req, timeout=TIMEOUT) as resp:
+        return resp.geturl()
+
+
+def write_json(path, obj):
+    tmp = path.parent / f".{path.name}.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps(obj), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def read_json(path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def unusual_titles():
+    cached = read_json(UNUSUAL_FILE)
+    try:
+        fresh = time.time() - UNUSUAL_FILE.stat().st_mtime < UNUSUAL_MAX_AGE
+    except OSError:
+        fresh = False
+    if cached and fresh:
+        return cached
+    try:
+        page = fetch(UNUSUAL_PAGE)
+        # Entries sit in tables, one per row; the row's first mainspace
+        # link is the unusual article, later links are description
+        # context (countries, dates) that would dilute the pool.
+        titles = []
+        for row in page.decode("utf-8", "replace").split("<tr>")[1:]:
+            m = re.search(r'href="/wiki/([^"#?]+)"', row)
+            if m and ":" not in m.group(1):
+                titles.append(m.group(1))
+        titles = list(dict.fromkeys(titles))
+        # A tiny yield means the page markup changed under us; keep
+        # whatever list we already had rather than poison the pool.
+        if len(titles) < 100:
+            raise ValueError("unusual-articles parse yielded too few entries")
+        write_json(UNUSUAL_FILE, titles)
+        return titles
+    except Exception:
+        if cached:
+            return cached
+        raise
+
+
+def article_summary(slug, fallback_url):
+    entry = {
+        "title": unquote(slug).replace("_", " "),
+        "summary": "",
+        "url": fallback_url,
+    }
+    try:
+        data = fetch(SUMMARY_API + quote(unquote(slug), safe=""))
+        summary = json.loads(data)
+        entry["title"] = summary.get("title", entry["title"])
+        entry["summary"] = summary.get("extract", "").strip()
+        entry["url"] = (
+            summary.get("content_urls", {}).get("desktop", {}).get("page", entry["url"])
+        )
+    except Exception:
+        pass
+    return entry
+
+
+def fetch_article():
+    pool = random.choice(("Good article", "Unusual article"))
+    if pool == "Good article":
+        final_url = resolve_redirect(GOOD_RANDOM)
+        path = urlparse(final_url).path
+        if "/wiki/" not in path:
+            raise RuntimeError("random redirect did not land on an article")
+        slug = path.split("/wiki/", 1)[1]
+    else:
+        slug = random.choice(unusual_titles())
+    entry = article_summary(slug, ARTICLE_BASE + slug)
+    entry["pool"] = pool
+    return entry
+
+
+def fetch_fresh():
+    try:
+        article = fetch_article()
+    except Exception:
+        return None
+    return {"date": dt.date.today().isoformat(), "article": article}
+
+
+def snapshot_path():
+    return Path(os.environ.get("WIKIDICE_ARTICLE", CACHE_DIR / "article.default.json"))
+
+
+def prune_snapshots():
+    now = time.time()
+    for old in CACHE_DIR.glob("article.*.json"):
+        try:
+            if now - old.stat().st_mtime > SNAPSHOT_MAX_AGE:
+                old.unlink()
+        except OSError:
+            pass
+
+
+def spawn_restock():
+    # Stamp before forking (like the zshrc git-fetch gate) so a stuck
+    # restock cannot respawn within the window; concurrent terminal
+    # bursts share one restock instead of stampeding.
+    try:
+        if time.time() - RESTOCK_STAMP.stat().st_mtime < RESTOCK_GATE:
+            return
+    except OSError:
+        pass
+    RESTOCK_STAMP.touch()
+    subprocess.Popen(
+        [sys.executable, os.path.abspath(__file__), "restock"],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def render():
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    today = dt.date.today().isoformat()
+
+    content = read_json(CACHE_FILE)
+    if not content or content.get("date") != today:
+        stale = content
+        content = fetch_fresh()
+        if content:
+            write_json(CACHE_FILE, content)
+        else:
+            content = stale
+
+    spawn_restock()
+    article = (content or {}).get("article")
+    if not article:
+        return 0
+
+    width = min(shutil.get_terminal_size((100, 24)).columns, 100)
+    label = f"wikipedia \N{MIDDLE DOT} {article.get('pool', 'article').lower()}"
+    hint = "wop to read"
+    bar = "\N{BOX DRAWINGS LIGHT HORIZONTAL}"
+    fill = max(2, width - len(label) - len(hint) - 8)
+
+    print()
+    print(f"{DIM}{bar * 2} {RESET}{label}{DIM} {bar * fill} {hint} {bar * 2}{RESET}")
+    print(f"  {BOLD}{article['title']}{RESET}")
+    if article.get("summary"):
+        wrapped = textwrap.wrap(article["summary"], width=width - 4)
+        for line in wrapped[:SUMMARY_LINES]:
+            print(f"    {line}")
+        if len(wrapped) > SUMMARY_LINES:
+            print("    \N{HORIZONTAL ELLIPSIS}")
+
+    write_json(snapshot_path(), article)
+    prune_snapshots()
+    return 0
+
+
+def open_article():
+    article = read_json(snapshot_path())
+    if not article or "url" not in article:
+        print("no article for this shell yet - run: wp", file=sys.stderr)
+        return 1
+
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    try:
+        subprocess.Popen(
+            [opener, article["url"]],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        print(f"{opener} not found", file=sys.stderr)
+        return 1
+    print(f"opening: {article['title']}")
+    return 0
+
+
+def restock():
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    content = fetch_fresh()
+    if content:
+        write_json(CACHE_FILE, content)
+    return 0
+
+
+def main():
+    args = sys.argv[1:]
+    if not args or args == ["render"]:
+        return render()
+    if args == ["open"]:
+        return open_article()
+    if args == ["restock"]:
+        return restock()
+    print(__doc__.split("Commands:")[1].strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

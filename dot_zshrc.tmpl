@@ -350,6 +350,26 @@ if command -v chezmoi >/dev/null; then
 fi
 {{- end }}
 
+{{ if ne .machine_kind "devcontainer" -}}
+# -----------------------------------------------------------------------------
+# Serendipity panel — one random Wikipedia article (Good or Unusual pool) on
+# fresh top-level terminals. wikidice renders instantly from a relay cache
+# and restocks it with a detached background fetch; only the first terminal
+# of the day fetches synchronously. Suppressed in nested shells (nvim, tmux,
+# IDE terminals) — those inherit the parent's WIKIDICE_ARTICLE, so `wop`
+# still opens the article shown on the parent's panel. `wp` re-rolls.
+# -----------------------------------------------------------------------------
+
+alias wp='wikidice'                                        # re-roll the panel
+wop() { wikidice open; }                                   # open the article
+
+if [[ -x "$HOME/.local/bin/wikidice" && -t 1 && \
+      -z "${NVIM-}${VIM-}${TMUX-}" && "${TERM_PROGRAM-}" != "vscode" ]]; then
+  export WIKIDICE_ARTICLE="$HOME/.cache/wikidice/article.$$.json"
+  wikidice
+fi
+{{- end }}
+
 # -----------------------------------------------------------------------------
 # Local overrides
 # -----------------------------------------------------------------------------
