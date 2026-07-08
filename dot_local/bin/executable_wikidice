@@ -13,7 +13,7 @@ a restock has replaced the shared cache.
 
 Commands:
     wikidice [render]    show the panel (default)
-    wikidice open        open this shell's article in the browser
+    wikidice open        open this shell's article (chawan TUI, else browser)
     wikidice restock     fetch a fresh article into the cache (internal)
 """
 
@@ -232,6 +232,11 @@ def open_article():
     if not article or "url" not in article:
         print("no article for this shell yet - run: wp", file=sys.stderr)
         return 1
+
+    # chawan needs a real terminal on both ends; otherwise fall back to
+    # handing the URL to the desktop.
+    if shutil.which("cha") and sys.stdin.isatty() and sys.stdout.isatty():
+        os.execvp("cha", ["cha", article["url"]])
 
     opener = "open" if sys.platform == "darwin" else "xdg-open"
     try:

@@ -98,6 +98,10 @@ packages:
       packages:
         - d2
         - plantuml
+    wiki-reader:
+      label: Wikipedia TUI reader (wop)
+      packages:
+        - chawan
 
   overrides:
     gh:
@@ -240,6 +244,10 @@ packages:
       # Ice — menu bar manager (macOS only).
       darwin_kind: cask
       linux_skip: true
+
+    chawan:
+      # Debian only packages it in testing, so apt machines are best-effort.
+      devcontainer_skip: true
 
     blueutil:
       # macOS Bluetooth CLI behind two features: the hotspot trigger
