@@ -1,6 +1,8 @@
 [buffer]
 images = true
 
-# $CHA_URL is the current page; pager.extern runs it through the shell.
+# M-o hands the current page ($CHA_URL, via the shell) to the desktop
+# browser. wikidice appends ?vectornightmode=1 to render Wikipedia dark
+# in the TUI only; drop it here so the browser keeps its own theme.
 [page]
-'M-o' = "() => pager.extern('{{ if .is_mac }}open{{ else }}xdg-open{{ end }} \"$CHA_URL\"', {suspend: false})"
+'M-o' = "() => pager.extern('{{ if .is_mac }}open{{ else }}xdg-open{{ end }} \"${CHA_URL%%[?&]vectornightmode=1}\"', {suspend: false})"
