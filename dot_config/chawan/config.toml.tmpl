@@ -1,8 +1,16 @@
 [buffer]
 images = true
 
+# Render Wikipedia in the dark theme. Logged-out pages bake the day
+# theme into the served HTML, so request night server-side on every
+# article load. The negative lookahead keeps the redirect from
+# re-triggering on the rewritten URL.
+[[siteconf]]
+url = '^https?://[a-z]+\.wikipedia\.org/wiki/(?!.*vectornightmode=.*)'
+rewrite-url = 'x => x.searchParams.append("vectornightmode", "1")'
+
 # M-o hands the current page ($CHA_URL, via the shell) to the desktop
-# browser. wikidice appends ?vectornightmode=1 to render Wikipedia dark
-# in the TUI only; drop it here so the browser keeps its own theme.
+# browser. Drop the night-theme param added above so the browser keeps
+# its own theme.
 [page]
 'M-o' = "() => pager.extern('{{ if .is_mac }}open{{ else }}xdg-open{{ end }} \"${CHA_URL%%[?&]vectornightmode=1}\"', {suspend: false})"
