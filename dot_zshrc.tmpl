@@ -362,6 +362,7 @@ fi
 
 alias wp='wikidice'                                        # re-roll the panel
 wop() { wikidice open; }                                   # open the article
+wope() { wikidice browse; }                                # open in browser
 
 if [[ -x "$HOME/.local/bin/wikidice" && -t 1 && \
       -z "${NVIM-}${VIM-}${TMUX-}" && "${TERM_PROGRAM-}" != "vscode" ]]; then
