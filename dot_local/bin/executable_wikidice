@@ -235,14 +235,17 @@ def open_article(force_browser=False):
         return 1
 
     # chawan needs a real terminal on both ends; otherwise fall back to
-    # handing the URL to the desktop.
+    # handing the URL to the desktop. Anonymous Wikipedia bakes the day
+    # theme into the served HTML, so request the night theme server-side
+    # -- chawan then renders the article dark.
     if (
         not force_browser
         and shutil.which("cha")
         and sys.stdin.isatty()
         and sys.stdout.isatty()
     ):
-        os.execvp("cha", ["cha", article["url"]])
+        sep = "&" if "?" in article["url"] else "?"
+        os.execvp("cha", ["cha", article["url"] + sep + "vectornightmode=1"])
 
     opener = "open" if sys.platform == "darwin" else "xdg-open"
     try:
