@@ -1,3 +1,6 @@
+[buffer]
+images = true
+
 # $CHA_URL is the current page; pager.extern runs it through the shell.
 [page]
 'M-o' = "() => pager.extern('{{ if .is_mac }}open{{ else }}xdg-open{{ end }} \"$CHA_URL\"', {suspend: false})"
