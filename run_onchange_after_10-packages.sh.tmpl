@@ -39,6 +39,13 @@ elif [ -x /usr/local/bin/brew ]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 
+# This step ensures presence only -- the weekly upgrade step handles upgrades.
+# Disable auto-update-before-install and snapshot the installed set once so
+# install_brew skips present packages without a per-package network round-trip.
+export HOMEBREW_NO_AUTO_UPDATE=1
+BREW_INSTALLED_FORMULAE="$(brew list --formula -1 2>/dev/null || true)"
+BREW_INSTALLED_CASKS="$(brew list --cask -1 2>/dev/null || true)"
+
 # -----------------------------------------------------------------------------
 # Install packages
 # -----------------------------------------------------------------------------

@@ -4,6 +4,17 @@
 install_brew() {
   local kind="$1"
   local name="$2"
+  local leaf="${name##*/}"
+
+  # Presence only -- the weekly upgrade step owns upgrades. Skip anything brew
+  # already tracks (BREW_INSTALLED_* are snapshotted once by the caller) so a
+  # re-apply stays quiet and never triggers an interactive upgrade prompt for an
+  # outdated-but-installed formula.
+  if [ "$kind" = "cask" ]; then
+    printf '%s\n' "${BREW_INSTALLED_CASKS:-}" | grep -qxF "$leaf" && return 0
+  else
+    printf '%s\n' "${BREW_INSTALLED_FORMULAE:-}" | grep -qxF "$leaf" && return 0
+  fi
 
   # Third-party tap packages (user/tap/name) are trusted as part of install.
   # Untrusted taps only warn today, but Homebrew 6.0 will ignore them
