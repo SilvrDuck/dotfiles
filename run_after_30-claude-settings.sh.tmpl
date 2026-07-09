@@ -19,9 +19,18 @@ set -euo pipefail
 TARGET="${HOME}/.claude/settings.json"
 mkdir -p "$(dirname "$TARGET")"
 
-PUBLIC_DESIRED='{{ .claude_settings | toJson }}'
-PRIVATE_PLUGINS='{{ index . "private_plugins" | default dict | toJson }}'
-PRIVATE_MARKETS_RAW='{{ index . "private_marketplaces" | default dict | toJson }}'
+PUBLIC_DESIRED=$(cat <<'JSON'
+{{ .claude_settings | toJson }}
+JSON
+)
+PRIVATE_PLUGINS=$(cat <<'JSON'
+{{ index . "private_plugins" | default dict | toJson }}
+JSON
+)
+PRIVATE_MARKETS_RAW=$(cat <<'JSON'
+{{ index . "private_marketplaces" | default dict | toJson }}
+JSON
+)
 
 # Wrap private marketplaces ({name: {repo: X}}) into Claude's schema
 # ({name: {source: {source: "github", repo: X}}}).
