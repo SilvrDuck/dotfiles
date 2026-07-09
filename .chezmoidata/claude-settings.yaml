@@ -8,6 +8,10 @@ claude_settings:
   theme: dark
   skipAutoPermissionPrompt: true
   effortLevel: xhigh
+  statusLine:
+    type: command
+    command: >-
+      jq -r 'def p($x): if $x==null then "?" else ($x|round|tostring) end; "5h \(p(.rate_limits.five_hour.used_percentage))% · 7d \(p(.rate_limits.seven_day.used_percentage))%"'
   enabledPlugins:
     frontend-design@claude-plugins-official: true
     superpowers@claude-plugins-official: true
