@@ -68,6 +68,7 @@ packages:
     containers:
       label: Containers
       packages:
+        - orbstack
         - docker
         - docker-compose
         - lazydocker
@@ -190,6 +191,20 @@ packages:
 
     d2:
       apt_manual: d2_script
+
+    orbstack:
+      # Containers splits by OS: macOS uses OrbStack -- one app bundling engine,
+      # docker CLI, and Compose in the default plugin path -- while Linux uses
+      # the native docker/docker-compose below (which land the Compose plugin
+      # where the CLI already looks). OrbStack has no Linux build.
+      darwin_kind: cask
+      linux_skip: true
+
+    docker:
+      darwin_skip: true
+
+    docker-compose:
+      darwin_skip: true
 
     kanban-md:
       darwin: antopolskiy/tap/kanban-md
