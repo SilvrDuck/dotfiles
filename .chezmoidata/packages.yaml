@@ -52,6 +52,9 @@ packages:
     fonts:
       - font-jetbrains-mono-nerd-font
 
+    chat:
+      - beeper
+
   # Each group is one toggle in the picker: `label` is shown to the user,
   # `packages` are real packages installed by this loop, and `upstream` are
   # curl|bash ids installed by upstream-installers.sh (gated the same way).
@@ -164,6 +167,12 @@ packages:
     obsidian:
       darwin_kind: cask
       pacman_aur: obsidian
+
+    beeper:
+      # Maintained AUR build for the current Beeper Desktop generation.
+      darwin_kind: cask
+      pacman_aur: beeper-v4-bin
+      devcontainer_skip: true
 
     raycast:
       darwin_kind: cask

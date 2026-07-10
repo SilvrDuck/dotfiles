@@ -138,11 +138,13 @@ alt-cmd-enter = '''exec-and-forget osascript -e 'tell application "Ghostty" to n
 alt-shift-b = 'exec-and-forget open -a "{{ $primary }}"'
 alt-shift-cmd-b = 'exec-and-forget open -a "{{ $secondary }}"'
 alt-shift-o = 'exec-and-forget open -a Obsidian'
+# Beeper: bundle name is "Beeper Desktop", not "Beeper".
+alt-shift-g = 'exec-and-forget open -a "Beeper Desktop"'
 alt-shift-t = 'exec-and-forget open -a "Activity Monitor"'
 # Dual-mode apps: launch-app-or-webapp prefers the native app and falls back to
 # a chromeless web-app window when it is absent (open -a exits nonzero, having
 # launched nothing). Mirrors the hypr bindings of the same name.
-alt-shift-g = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Telegram Telegram https://web.telegram.org/a/'
+alt-shift-cmd-g = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Telegram Telegram https://web.telegram.org/a/'
 alt-shift-m = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Spotify Spotify https://open.spotify.com'
 alt-shift-s = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp Slack Slack https://app.slack.com/client'
 # Steam has no web equivalent, so plain open -a — a no-op until the app is
@@ -177,9 +179,9 @@ alt-shift-e = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Ma
 alt-shift-c = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Calendar https://calendar.google.com/calendar/u/0/r'
 alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
 # WhatsApp prefers WhatsApp.app if installed, else launch-or-focuses the web
-# window by page title (via launch-app-or-webapp; mirrors hypr SUPER+SHIFT+ALT+G).
+# window by page title (via launch-app-or-webapp; mirrors hypr SUPER+SHIFT+CTRL+G).
 # Infomaniak mail opens a fresh --app window, matching Omarchy's plain launch.
-alt-shift-cmd-g = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp WhatsApp WhatsApp https://web.whatsapp.com/'
+alt-shift-ctrl-g = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp WhatsApp WhatsApp https://web.whatsapp.com/'
 alt-shift-cmd-e = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://ksuite.infomaniak.com/all/mail/'''
 
 # Android hotspot: bounce Bluetooth so the phone's Tasker profile
