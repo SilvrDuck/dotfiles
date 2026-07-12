@@ -63,6 +63,7 @@ packages:
       label: AI tools
       packages:
         - claude
+        - chatgpt
       upstream:
         - claude-cli
         - opencode
@@ -182,6 +183,11 @@ packages:
       darwin_kind: cask
       linux_skip: true
       # Anthropic's Claude desktop app (the cask), not the claude CLI.
+
+    chatgpt:
+      darwin_kind: cask
+      linux_skip: true
+      # OpenAI's official ChatGPT desktop app (macOS only).
 
     visual-studio-code:
       darwin_kind: cask
