@@ -167,16 +167,18 @@ alt-shift-d = '''exec-and-forget osascript -e 'tell application "Ghostty" to new
 # Google Maps as a chromeless Chrome --app window. Mirrors hypr SUPER+SHIFT+ALT+M.
 alt-shift-cmd-m = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://www.google.com/maps'''
 
-# Web apps as chromeless Chrome --app windows. Gmail and Calendar launch-or-
-# focus: focus an existing window by a page-<title> substring (launch-or-focus-
-# webapp, our AeroSpace port of omarchy-launch-or-focus-webapp), else launch.
-# Patterns stay stable across views/branding — Gmail matches "Mail" (a Workspace
-# tab is titled "<org> Mail", never "Gmail"); Calendar matches "Calendar". ChatGPT
-# and YouTube intentionally open a fresh window each press, via the Chrome binary
-# directly because `open --args` is ignored when Chrome is already running.
-alt-shift-a = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://chatgpt.com'''
+# ChatGPT is dual-mode (launch-app-or-webapp): the native ChatGPT.app if
+# installed, else a chromeless Chrome --app window.
+alt-shift-a = 'exec-and-forget $HOME/.config/aerospace/launch-app-or-webapp ChatGPT ChatGPT https://chatgpt.com'
+# Gmail and Calendar launch-or-focus: focus an existing chromeless Chrome --app
+# window by a page-<title> substring (launch-or-focus-webapp, our AeroSpace port
+# of omarchy-launch-or-focus-webapp), else launch. Patterns stay stable across
+# views/branding — Gmail matches "Mail" (a Workspace tab is titled "<org> Mail",
+# never "Gmail"); Calendar matches "Calendar".
 alt-shift-e = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Mail https://mail.google.com/mail/'
 alt-shift-c = 'exec-and-forget $HOME/.config/aerospace/launch-or-focus-webapp Calendar https://calendar.google.com/calendar/u/0/r'
+# YouTube intentionally opens a fresh window each press, via the Chrome binary
+# directly because `open --args` is ignored when Chrome is already running.
 alt-shift-y = '''exec-and-forget "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --app=https://youtube.com'''
 # WhatsApp prefers WhatsApp.app if installed, else launch-or-focuses the web
 # window by page title (via launch-app-or-webapp; mirrors hypr SUPER+SHIFT+CTRL+G).
