@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Hidden macOS defaults with no System Settings UI. run_onchange re-runs the
+# script whenever its rendered content changes, so editing or adding a
+# `defaults write` line below re-triggers it on the next apply.
+{{ if .is_mac -}}
+set -euo pipefail
+
+# Ctrl+cmd+click anywhere in a window body drags it (Linux-style); the chord
+# is hardcoded by AppKit and cannot be remapped. Read at login.
+defaults write -g NSWindowShouldDragOnGesture -bool true
+
+echo "macOS defaults written — log out and back in to activate."
+{{ end -}}
+exit 0
