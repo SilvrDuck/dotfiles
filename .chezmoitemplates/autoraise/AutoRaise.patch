@@ -1,0 +1,63 @@
+diff --git a/AutoRaise.mm b/AutoRaise.mm
+index a2e523e..6d89bae 100644
+--- a/AutoRaise.mm
++++ b/AutoRaise.mm
+@@ -445,6 +445,45 @@ AXUIElementRef get_raisable_window(AXUIElementRef _element, CGPoint point, int c
+     return _window;
+ }
+ 
++// Focus-follows-mouse must ignore windows parked almost entirely off-screen.
++// Tiling window managers that hide inactive spaces (e.g. AeroSpace) shove those
++// windows past the screen edge, but macOS refuses to place a window fully out of
++// view and leaves a few-pixel sliver behind. Hovering that sliver would otherwise
++// raise/focus the window and yank the user onto its space. Measured in Quartz
++// global coordinates (top-left origin), the same space kAXPositionAttribute uses,
++// so no NSScreen flip is needed.
++static bool window_mostly_offscreen(AXUIElementRef _window) {
++    AXValueRef _pos = NULL;
++    AXValueRef _size = NULL;
++    CGPoint pos;
++    CGSize size;
++    bool measured = false;
++    AXUIElementCopyAttributeValue(_window, kAXPositionAttribute, (CFTypeRef *) &_pos);
++    AXUIElementCopyAttributeValue(_window, kAXSizeAttribute, (CFTypeRef *) &_size);
++    if (_pos && _size &&
++        AXValueGetValue(_pos, kAXValueTypeCGPoint, &pos) &&
++        AXValueGetValue(_size, kAXValueTypeCGSize, &size)) {
++        measured = true;
++    }
++    if (_pos) { CFRelease(_pos); }
++    if (_size) { CFRelease(_size); }
++    // If the frame can't be read, don't suppress — better a stray raise than none.
++    if (!measured || size.width <= 0 || size.height <= 0) { return false; }
++
++    CGRect window_rect = CGRectMake(pos.x, pos.y, size.width, size.height);
++    double window_area = (double) size.width * size.height;
++    double visible_area = 0;
++    uint32_t display_count = 0;
++    CGDirectDisplayID displays[16];
++    if (CGGetActiveDisplayList(16, displays, &display_count) == kCGErrorSuccess) {
++        for (uint32_t i = 0; i < display_count; i++) {
++            CGRect visible = CGRectIntersection(window_rect, CGDisplayBounds(displays[i]));
++            if (!CGRectIsNull(visible)) { visible_area += visible.size.width * visible.size.height; }
++        }
++    }
++    return (visible_area / window_area) < 0.01;
++}
++
+ AXUIElementRef get_mousewindow(CGPoint point) {
+     AXUIElementRef _element = NULL;
+     AXError error = AXUIElementCopyElementAtPosition(_accessibility_object, point.x, point.y, &_element);
+@@ -474,6 +513,12 @@ AXUIElementRef get_mousewindow(CGPoint point) {
+         NSLog(@"Copy element: AXError %d", error);
+     }
+ 
++    if (_window && window_mostly_offscreen(_window)) {
++        if (verbose) { NSLog(@"Ignoring off-screen (parked) window"); }
++        CFRelease(_window);
++        _window = NULL;
++    }
++
+     if (verbose) {
+         if (_window) { logWindowTitle(@"Mouse window", _window); }
+         else { NSLog(@"No raisable window"); }

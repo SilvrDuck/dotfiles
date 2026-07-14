@@ -1,0 +1,103 @@
+{{- $tag := "v5.6" -}}
+{{- $sha := "1de2df188a8a17dcb7a05d563b558ebebc9f3d5e" -}}
+{{- $patch := include ".chezmoitemplates/autoraise/AutoRaise.patch" -}}
+#!/usr/bin/env bash
+# AUTORAISE-FORK — builds a patched AutoRaise from pinned upstream source. Stock
+# AutoRaise raises/focuses whatever window sits under the cursor, including the
+# few-pixel sliver of an inactive AeroSpace workspace that macOS leaves peeking
+# in a screen corner — so brushing that corner flips the workspace. The patch
+# (.chezmoitemplates/autoraise/AutoRaise.patch) teaches get_mousewindow to ignore
+# windows parked almost entirely off-screen. This replaces the Homebrew cask
+# (disabled in .chezmoidata/packages.yaml under the same tag). AutoRaise is a
+# single-file clang build (~2s), so we compile on apply rather than shipping a
+# prebuilt release the way the AeroSpace fork must. It also uninstalls the
+# superseded dimentium AutoRaise cask on any machine that still carries it, so
+# the old menubar app stops auto-starting at login and fighting our agent — no
+# manual `brew uninstall` to remember per machine.
+#
+# WHEN THE OFF-SCREEN GUARD LANDS UPSTREAM (or you no longer need it):
+#   1. Delete this file, com.dotfiles.autoraise.plist.tmpl, dot_config/AutoRaise,
+#      and .chezmoitemplates/autoraise.
+#   2. packages.yaml: un-comment the two AUTORAISE-FORK blocks (the `- autoraise`
+#      entry and the `autoraise:` override); drop the tags.
+#   3. .chezmoiremove.tmpl (temporarily, under is_mac): .local/bin/autoraise and
+#      Library/LaunchAgents/com.dotfiles.autoraise.plist — bootout the agent
+#      first: launchctl bootout gui/$(id -u)/com.dotfiles.autoraise.
+#   4. Hand the user: brew install --cask dimentium/autoraise/autoraiseapp.
+#
+# Bumping the pin: set $tag/$sha above, re-author the patch against that source,
+# re-run apply. The build id below is a hash of the pin plus the patch, so a
+# rebuild happens only when either changes; a config or plist edit just reloads
+# the agent. Best-effort throughout: any failure echoes and exits 0.
+#
+# plist hash:  {{ include "Library/LaunchAgents/com.dotfiles.autoraise.plist.tmpl" | sha256sum }}
+# config hash: {{ include "dot_config/AutoRaise/config" | sha256sum }}
+{{ if .is_mac -}}
+label="com.dotfiles.autoraise"
+bin="$HOME/.local/bin/autoraise"
+stamp="$HOME/.local/state/autoraise/build.id"
+plist="$HOME/Library/LaunchAgents/${label}.plist"
+domain="gui/$(id -u)"
+build_id="{{ printf "%s\n%s" $sha $patch | sha256sum }}"
+
+mkdir -p "$HOME/.local/bin" "$HOME/.local/state/autoraise"
+
+# Retire the superseded Homebrew cask on any machine that still has it, before
+# our own binary loads, so the old menubar app can't relaunch at login and fight
+# ours. Idempotent: a no-op once gone, harmless where it never existed. The
+# pkill matches the old .app bundle path only, never our ~/.local/bin/autoraise.
+if command -v brew >/dev/null 2>&1; then
+  old="$(brew list --cask 2>/dev/null | grep -i autoraise | head -1 || true)"
+  if [ -n "$old" ]; then
+    echo "autoraise: removing superseded cask $old"
+    brew uninstall --cask --force "$old" >/dev/null 2>&1 || true
+    pkill -f 'AutoRaise.app' 2>/dev/null || true
+  fi
+fi
+
+# Rebuild only when the pinned source or our patch changed; a missing binary
+# also forces one. No compiler (no Xcode CLT) means skip, not fail.
+if [ ! -x "$bin" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$build_id" ]; then
+  if ! command -v g++ >/dev/null 2>&1; then
+    echo "autoraise: no C++ compiler on PATH; skipped"
+  else
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    src="https://raw.githubusercontent.com/sbmpost/AutoRaise/{{ $sha }}/AutoRaise.mm"
+    if ! curl -fsSL "$src" -o "$work/AutoRaise.mm"; then
+      echo "autoraise: source download failed; skipped"
+    else
+      cat > "$work/AutoRaise.patch" <<'AUTORAISE_PATCH_EOF'
+{{ $patch | trimSuffix "\n" }}
+AUTORAISE_PATCH_EOF
+      if ! ( cd "$work" && git apply -p1 AutoRaise.patch ); then
+        echo "autoraise: patch did not apply; skipped"
+      else
+        sky="/System/Library/PrivateFrameworks/SkyLight.framework"
+        if [ -d "$sky" ]; then
+          skyargs=(-D'SKYLIGHT_AVAILABLE=1' -F /System/Library/PrivateFrameworks -framework SkyLight)
+        else
+          skyargs=(-D'SKYLIGHT_AVAILABLE=0')
+        fi
+        if g++ -O2 -Wall -fobjc-arc -D'NS_FORMAT_ARGUMENT(A)=' "${skyargs[@]}" \
+            -o "$work/autoraise" "$work/AutoRaise.mm" -framework AppKit; then
+          install -m 0755 "$work/autoraise" "$bin"
+          echo "$build_id" > "$stamp"
+          echo "autoraise: built {{ $tag }} (patched, off-screen guard)"
+        else
+          echo "autoraise: compile failed; skipped"
+        fi
+      fi
+    fi
+  fi
+fi
+
+# (Re)load the agent so a fresh binary or changed config takes effect. bootout
+# tolerates "not loaded yet", so first apply and re-applies share one path.
+if [ -x "$bin" ]; then
+  launchctl bootout "$domain/$label" 2>/dev/null || true
+  launchctl bootstrap "$domain" "$plist" 2>/dev/null || true
+  launchctl enable "$domain/$label" 2>/dev/null || true
+fi
+{{ end -}}
+exit 0

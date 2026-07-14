@@ -1,0 +1,6 @@
+# Non-default focus-follows-mouse tuning; anything omitted keeps AutoRaise's own
+# defaults. pollMillis floors at 20 upstream. requireMouseStop=false raises on
+# hover immediately instead of waiting for the cursor to settle — the off-screen
+# guard in our patched build is what keeps that from grabbing parked windows.
+pollMillis=20
+requireMouseStop=false

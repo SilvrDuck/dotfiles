@@ -89,7 +89,10 @@ packages:
         # - aerospace
         - alt-tab
         - borders
-        - autoraise
+        # AUTORAISE-FORK: brew cask disabled; we build a patched AutoRaise from
+        # source (adds an off-screen-window guard). Restore on upstream/merge —
+        # see run_onchange_after_60-autoraise.sh.tmpl.
+        # - autoraise
         - displayplacer
         - displaylink
         - im-select
@@ -241,11 +244,12 @@ packages:
       linux_skip: true
       # JankyBorders — focus-border daemon for AeroSpace.
 
-    autoraise:
-      darwin: dimentium/autoraise/autoraiseapp
-      darwin_kind: cask
-      linux_skip: true
-      # AutoRaise — focus-follows-mouse for AeroSpace (no native equivalent).
+    # AUTORAISE-FORK: cask disabled while we build a patched AutoRaise from
+    # source (off-screen-window guard). Restore both blocks together.
+    # autoraise:
+    #   darwin: dimentium/autoraise/autoraiseapp
+    #   darwin_kind: cask
+    #   linux_skip: true
 
     nwg-displays:
       # Wayland (sway/Hyprland) display GUI — no macOS build.
