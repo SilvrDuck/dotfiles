@@ -4,6 +4,16 @@ Personal chezmoi dotfiles for macOS, Linux, Omarchy, and devcontainers.
 
 Tries to not override Omarchy stuff.
 
+| Feature | macOS | Linux | Devcontainer |
+|---|:-:|:-:|:-:|
+| Shell + CLI stack (zsh · starship · nvim · eza/rg/fd/…) | ✓ | ✓ | ✓ |
+| Per-machine package picker + weekly auto-upgrade | ✓ | ✓ | ✓ |
+| AI CLIs + agent-skills fanout + MCP servers | ✓ | ✓ | ✓ |
+| Tiling WM (AeroSpace ↔ Hyprland/waybar) | ✓ | ✓ | — |
+| Android Wi-Fi hotspot trigger (⌃⌥⌘B) | ✓ | — | — |
+| Bluetooth sleep/wake toggle | ✓ | — | — |
+| Raycast fleet launcher · HiDPI + multi-monitor helpers | ✓ | — | — |
+
 ## Desktop
 
 On a fresh Mac, run first and wait for it to finish:
@@ -20,9 +30,7 @@ sudo -v && sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuc
 
 ## Scripts
 
-Things that genuinely need human input (SSH keys, secrets, browser OAuth,
-GUI follow-ups). Anything that can be unattended lives in the chezmoi
-bootstrap chain, not here.
+Interactive setup that needs a human: SSH keys, secrets, browser OAuth, GUI grants.
 
 ```bash
 $(chezmoi source-path)/scripts/setup-git-default-context
