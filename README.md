@@ -4,15 +4,7 @@ Personal chezmoi dotfiles for macOS, Linux, Omarchy, and devcontainers.
 
 Tries to not override Omarchy stuff.
 
-| Feature | macOS | Linux | Devcontainer |
-|---|:-:|:-:|:-:|
-| Shell + CLI stack (zsh · starship · nvim · eza/rg/fd/…) | ✓ | ✓ | ✓ |
-| Per-machine package picker + weekly auto-upgrade | ✓ | ✓ | ✓ |
-| AI CLIs + agent-skills fanout + MCP servers | ✓ | ✓ | ✓ |
-| Tiling WM (AeroSpace ↔ Hyprland/waybar) | ✓ | ✓ | — |
-| Android Wi-Fi hotspot trigger (⌃⌥⌘B) | ✓ | — | — |
-| Bluetooth sleep/wake toggle | ✓ | — | — |
-| Raycast fleet launcher · HiDPI + multi-monitor helpers | ✓ | — | — |
+See [Features](#features).
 
 ## Desktop
 
@@ -122,4 +114,27 @@ Rare manual procedures, documented not automated.
 
 - [Crisp HiDPI scaling on external displays (Tahoe + BetterDisplay)](guides/tahoe-hidpi-betterdisplay.md)
 - [Android Wi-Fi hotspot from macOS (Bluetooth)](guides/android-hotspot-bluetooth-setup.md)
+
+## Features
+
+### Platforms
+
+| Feature | macOS | Linux | Devcontainer |
+|---|:-:|:-:|:-:|
+| Shell + CLI stack (zsh · starship · nvim · eza/rg/fd/…) | ✓ | ✓ | ✓ |
+| Per-machine package picker + weekly auto-upgrade | ✓ | ✓ | ✓ |
+| AI CLIs + agent-skills fanout + MCP servers | ✓ | ✓ | ✓ |
+| Tiling WM (AeroSpace ↔ Hyprland/waybar) | ✓ | ✓ | — |
+
+### Utilities
+
+- `clank` opens and manages this repo in Claude Code from anywhere.
+- `scratch` runs Claude in a throwaway `~/scratch` dir for throwaway tasks you want to do in a bash env.
+- A wikipedia extract appears at every terminal startup. `wop` opens the page in a TUI, `wope` opens it in a browser, `wp` re-rolls the panel.
+- `vihelp` is a Claude session preloaded as a vim/neovim cheat-sheet with your nvim config.
+- `fleet` captures a fleeting note into the Obsidian vault (also the command on ctrl+alt+super+Space).
+- `android-hotspot` (mac only, ⌃⌥⌘B) starts your phone's Wi-Fi hotspot over Bluetooth without touching the phone. Per-machine setup under [macOS manual setups](#macos-manual-setups).
+- `bt-sleep` turns Bluetooth off on sleep and back on at wake.
+- `ob` opens the Obsidian vault in nvim.
+- `cc` / `ccc` / `ccr` run Claude at `--effort xhigh`: plain, continue, resume.
 
