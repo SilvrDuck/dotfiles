@@ -1,45 +1,55 @@
 #!/usr/bin/env bash
 #
 # Claude Code status line:
-#   <model> (<effort>) · $<session cost>
-# then, when usage-window percentages are reported, the 5h / 7d figures;
-# otherwise, when a monthly budget is set for this machine, a month-to-date
-# cost estimate against that budget.
+#   <model> (<effort>) · <session>
+# where <session> follows what the account reports. With usage-window
+# percentages, the session's share of the rolling 5-hour spend, then the
+# 5h / 7d window figures; with a monthly budget set for this machine, the
+# session cost plus a month-to-date estimate against that budget; otherwise
+# the session cost alone.
 #
-# The month figure is an estimate: ccusage sums this machine's local
-# transcripts at public list pricing, so it will not reflect other machines,
-# other clients, or account-specific rates. It is refreshed by a detached,
-# throttled background job and read from cache, so rendering never blocks.
+# Spend figures are estimates: ccusage sums this machine's local transcripts
+# at public list pricing, so they will not reflect other machines, other
+# clients, or account-specific rates. They are refreshed by detached,
+# throttled background jobs and read from cache, so rendering never blocks.
 # Set claude_monthly_spend_limit in the per-machine chezmoi [data] to enable
-# it; unset (0) leaves the month display off. claude_month_cost_factor
-# (default 1.0) scales the estimate to reconcile it with an authoritative
-# figure when the two differ; adjust as needed.
+# the month display; unset (0) leaves it off. claude_month_cost_factor
+# (default 1.0) scales the month estimate to reconcile it with an
+# authoritative figure when the two differ; adjust as needed.
 
 set -uo pipefail
 
 LIMIT={{ index . "claude_monthly_spend_limit" | default 0 }}
 FACTOR={{ index . "claude_month_cost_factor" | default 1.0 }}
-CACHE="${HOME}/.cache/dotfiles/claude-month-cost"
+CACHE_DIR="${HOME}/.cache/dotfiles"
+CACHE_MONTH="${CACHE_DIR}/claude-month-cost"
+CACHE_5H="${CACHE_DIR}/claude-5h-cost"
 TTL_MIN=10
 
-refresh_month_cost() {
-  local start cost
-  start=$(date +%Y%m01)
+stale() {
+  [ -z "$(find "$1" -mmin -"$TTL_MIN" 2>/dev/null)" ]
+}
+
+read_cache() {
+  [ -f "$1" ] && cat "$1" 2>/dev/null || printf ''
+}
+
+refresh_cache() {
+  local cache="$1" filter="$2"
+  shift 2
+  local -a runner
   if command -v ccusage >/dev/null 2>&1; then
-    set -- ccusage
+    runner=(ccusage)
   elif command -v bunx >/dev/null 2>&1; then
-    set -- bunx ccusage
+    runner=(bunx ccusage)
   else
-    set -- npx -y ccusage
+    runner=(npx -y ccusage)
   fi
-  cost=$("$@" monthly --since "$start" --json --offline 2>/dev/null \
-    | jq -r '(.totals.totalCost)
-             // ((.monthly // .)
-                 | if type == "array" then (map(.totalCost) | add) else .totalCost end)
-             // 0' 2>/dev/null)
-  [ -n "$cost" ] || cost=0
-  mkdir -p "$(dirname "$CACHE")"
-  printf '%s' "$cost" > "$CACHE"
+  local val
+  val=$("${runner[@]}" "$@" --json --offline 2>/dev/null | jq -r "$filter" 2>/dev/null)
+  [ -n "$val" ] || val=0
+  mkdir -p "$(dirname "$cache")"
+  printf '%s' "$val" > "$cache"
 }
 
 payload=$(cat)
@@ -55,17 +65,29 @@ IFS=$'\x1f' read -r model effort session rl < <(
 
 modelpart="$model"
 [ -n "$effort" ] && modelpart="$modelpart ($effort)"
-line=$(printf '%s · $%.2f' "$modelpart" "$session")
+line="$modelpart"
 
 if [ "$rl" = "1" ]; then
+  block=$(read_cache "$CACHE_5H")
+  if stale "$CACHE_5H"; then
+    refresh_cache "$CACHE_5H" \
+      '[.blocks[]? | select(.isActive) | .costUSD] | add // 0' \
+      blocks --active >/dev/null 2>&1 </dev/null &
+    disown 2>/dev/null || true
+  fi
+  share=$(awk -v s="$session" -v b="$block" \
+    'BEGIN { if (b > 0) printf "%.0f%%", s / b * 100; else printf "?%%" }')
+  line="$line · $share"
   line="$line$(printf '%s' "$payload" | jq -r '
     def p($x): if $x == null then "?" else ($x | round | tostring) end;
     " · 5h \(p(.rate_limits.five_hour.used_percentage))% · 7d \(p(.rate_limits.seven_day.used_percentage))%"')"
 elif [ "$LIMIT" != "0" ]; then
-  spent=""
-  [ -f "$CACHE" ] && spent=$(cat "$CACHE" 2>/dev/null)
-  if [ -z "$(find "$CACHE" -mmin -"$TTL_MIN" 2>/dev/null)" ]; then
-    refresh_month_cost >/dev/null 2>&1 </dev/null &
+  line=$(printf '%s · $%.2f' "$line" "$session")
+  spent=$(read_cache "$CACHE_MONTH")
+  if stale "$CACHE_MONTH"; then
+    refresh_cache "$CACHE_MONTH" \
+      '(.totals.totalCost) // ((.monthly // .) | if type == "array" then (map(.totalCost) | add) else .totalCost end) // 0' \
+      monthly --since "$(date +%Y%m01)" >/dev/null 2>&1 </dev/null &
     disown 2>/dev/null || true
   fi
   if [ -n "$spent" ]; then
@@ -74,6 +96,8 @@ elif [ "$LIMIT" != "0" ]; then
   else
     line=$(awk -v m="$line" -v l="$LIMIT" 'BEGIN { printf "%s · ~$?/$%.0f mo", m, l }')
   fi
+else
+  line=$(printf '%s · $%.2f' "$line" "$session")
 fi
 
 printf '%s' "$line"
