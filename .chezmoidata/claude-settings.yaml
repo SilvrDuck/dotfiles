@@ -10,8 +10,7 @@ claude_settings:
   effortLevel: xhigh
   statusLine:
     type: command
-    command: >-
-      jq -r 'def p($x): if $x==null then "?" else ($x|round|tostring) end; "\(.model.display_name // "?")\(if .effort.level then " (\(.effort.level))" else "" end) · 5h \(p(.rate_limits.five_hour.used_percentage))% · 7d \(p(.rate_limits.seven_day.used_percentage))%"'
+    command: bash ~/.claude/statusline.sh
   enabledPlugins:
     frontend-design@claude-plugins-official: true
     superpowers@claude-plugins-official: true
