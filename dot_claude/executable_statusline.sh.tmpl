@@ -3,8 +3,9 @@
 # Claude Code status line:
 #   <model> (<effort>) · <session>
 # where <session> follows what the account reports. With usage-window
-# percentages, the session's share of the rolling 5-hour spend, then the
-# 5h / 7d window figures; with a monthly budget set for this machine, the
+# percentages, the slice of the 5-hour window this session accounts for
+# (the 5h figure scaled by the session's cost share of the active block),
+# then the 5h / 7d window figures; with a monthly budget set for this machine, the
 # session cost plus a month-to-date estimate against that budget; otherwise
 # the session cost alone.
 #
@@ -54,12 +55,13 @@ refresh_cache() {
 
 payload=$(cat)
 
-IFS=$'\x1f' read -r model effort session rl < <(
+IFS=$'\x1f' read -r model effort session rl fh < <(
   printf '%s' "$payload" | jq -r '
     [ (.model.display_name // "?")
     , (.effort.level // "")
     , ((.cost.total_cost_usd // 0) | tostring)
     , (if .rate_limits then "1" else "0" end)
+    , ((.rate_limits.five_hour.used_percentage // "") | tostring)
     ] | join("\u001f")'
 )
 
@@ -75,8 +77,12 @@ if [ "$rl" = "1" ]; then
       blocks --active >/dev/null 2>&1 </dev/null &
     disown 2>/dev/null || true
   fi
-  share=$(awk -v s="$session" -v b="$block" \
-    'BEGIN { if (b > 0) printf "%.0f%%", s / b * 100; else printf "?%%" }')
+  share=$(awk -v s="$session" -v b="$block" -v fh="$fh" \
+    'BEGIN {
+       if (fh == "" || b <= 0) { printf "?%%"; exit }
+       v = fh * s / b; if (v > fh) v = fh
+       printf "%.0f%%", v
+     }')
   line="$line · $share"
   line="$line$(printf '%s' "$payload" | jq -r '
     def p($x): if $x == null then "?" else ($x | round | tostring) end;
