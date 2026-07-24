@@ -2,8 +2,8 @@
 # probe.sh — diagnose what the best-effort install produced on this machine.
 #
 # Generalist by design: every check is derived from repo state at runtime
-# (.chezmoidata/packages.yaml, .chezmoitemplates/ai-cli-installers.sh,
-# dot_config/mise/config.toml, run_*.tmpl bootstrap scripts, scripts/). No
+# (.chezmoidata/packages.yaml, .chezmoitemplates/upstream-installers.sh,
+# the mise-install script's heredoc, run_*.tmpl bootstrap scripts, scripts/). No
 # per-package or per-script knowledge is encoded here — adding a tool to
 # packages.yaml or a new script under scripts/ is picked up automatically.
 #
@@ -18,8 +18,10 @@ IFS=$'\n\t'
 SKILL_DIR="$(cd "${BASH_SOURCE%/*}" && pwd)"
 REPO="$(chezmoi source-path 2>/dev/null || { cd "$SKILL_DIR/../../../.." && pwd; })"
 PKG_YAML="$REPO/.chezmoidata/packages.yaml"
-MISE_CFG="$REPO/dot_config/mise/config.toml"
-AI_INSTALLER="$REPO/.chezmoitemplates/ai-cli-installers.sh"
+# mise's [tools] baseline lives in the install script's heredoc, not a tracked
+# config file — mise rewrites ~/.config/mise/config.toml, so it is unmanaged.
+MISE_CFG="$REPO/run_onchange_after_15-mise-install.sh.tmpl"
+AI_INSTALLER="$REPO/.chezmoitemplates/upstream-installers.sh"
 SCRIPTS_DIR="$REPO/scripts"
 
 emit() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "${4:-}"; }
@@ -118,7 +120,7 @@ if [ -r "$AI_INSTALLER" ]; then
   {
     grep -oE 'command -v [a-z][a-z0-9_-]+[^|]*\|\|[[:space:]]+(curl|wget|brew|npm)' \
          "$AI_INSTALLER" | awk '{print $3}'
-    grep -oE '^install_[a-z][a-z0-9_-]+$' "$AI_INSTALLER" | sed 's/^install_//'
+    grep -oE '^install_[a-z][a-z0-9_-]+' "$AI_INSTALLER" | sed 's/^install_//'
   } | sort -u | while read -r cli; do
     [ -n "$cli" ] || continue
     has "$cli" \

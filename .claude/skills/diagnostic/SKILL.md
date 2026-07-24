@@ -1,6 +1,6 @@
 ---
 name: diagnostic
-description: Use when the user runs /diagnostic or asks what the chezmoi best-effort install left missing on this machine. Reads expected artifacts from the repo at runtime (`.chezmoidata/packages.yaml`, `.chezmoitemplates/ai-cli-installers.sh`, `dot_config/mise/config.toml`, bootstrap `run_*.tmpl` scripts, manual `scripts/`), probes each one against the active package manager and system state, and reports `ok` / `missing` / `not_run` / `n/a` / `unknown` per item. Proposes the exact fix command per non-ok item without running it.
+description: Use when the user runs /diagnostic or asks what the chezmoi best-effort install left missing on this machine. Reads expected artifacts from the repo at runtime (`.chezmoidata/packages.yaml`, `.chezmoitemplates/upstream-installers.sh`, `run_onchange_after_15-mise-install.sh.tmpl`, bootstrap `run_*.tmpl` scripts, manual `scripts/`), probes each one against the active package manager and system state, and reports `ok` / `missing` / `not_run` / `n/a` / `unknown` per item. Proposes the exact fix command per non-ok item without running it.
 ---
 
 # /diagnostic
@@ -43,7 +43,7 @@ Group by category in this order: `packages` → `ai_cli` → `mise` → `bootstr
 For each non-`ok`, non-`n/a` row, append the single command that retries it:
 
 - `packages` missing → `chezmoi apply` (re-runs `run_onchange_after_10-packages.sh.tmpl`, which re-attempts every install). For one or two, add the direct fallback for the active manager (`brew install …` / `sudo pacman -S …` / `yay -S …` / `sudo apt-get install …`).
-- `ai_cli` missing → quote the exact `curl | bash` line from `.chezmoitemplates/ai-cli-installers.sh` for that CLI.
+- `ai_cli` missing → quote the exact `curl | bash` line from `.chezmoitemplates/upstream-installers.sh` for that CLI.
 - `mise` missing → `mise install`.
 - `bootstrap login_shell` → `chsh -s "$(command -v zsh)"`.
 - `bootstrap gitleaks_hook` → `chezmoi apply` (re-runs the hook script). If `gitleaks` is missing too, install it first.
