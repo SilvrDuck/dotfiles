@@ -69,6 +69,10 @@ modelpart="$model"
 [ -n "$effort" ] && modelpart="$modelpart ($effort)"
 line="$modelpart"
 
+# Session cost, shown only once it rounds to at least a cent; a fresh
+# session (no spend yet, no rate-limit data) renders the model alone.
+sess_cost=$(awk -v s="$session" 'BEGIN { if (s >= 0.005) printf " · $%.2f", s }')
+
 if [ "$rl" = "1" ]; then
   block=$(read_cache "$CACHE_5H")
   if stale "$CACHE_5H"; then
@@ -88,7 +92,7 @@ if [ "$rl" = "1" ]; then
     def p($x): if $x == null then "?" else ($x | round | tostring) end;
     " · 5h \(p(.rate_limits.five_hour.used_percentage))% · 7d \(p(.rate_limits.seven_day.used_percentage))%"')"
 elif [ "$LIMIT" != "0" ]; then
-  line=$(printf '%s · $%.2f' "$line" "$session")
+  line="$line$sess_cost"
   spent=$(read_cache "$CACHE_MONTH")
   if stale "$CACHE_MONTH"; then
     refresh_cache "$CACHE_MONTH" \
@@ -103,7 +107,7 @@ elif [ "$LIMIT" != "0" ]; then
     line=$(awk -v m="$line" -v l="$LIMIT" 'BEGIN { printf "%s · ~$?/$%.0f mo", m, l }')
   fi
 else
-  line=$(printf '%s · $%.2f' "$line" "$session")
+  line="$line$sess_cost"
 fi
 
 printf '%s' "$line"
