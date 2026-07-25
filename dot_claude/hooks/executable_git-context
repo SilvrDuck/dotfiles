@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+# Report where the repo actually stands, so work never starts against stale
+# refs: current branch, drift from its upstream, and whether the default
+# branch has moved on without us.
+#
+#   --session   SessionStart hook. Always fetches, always reports.
+#   --guard     PreToolUse hook. Refetches only once refs age past
+#               FETCH_MAX_AGE, and speaks only when the position is suspect,
+#               so a healthy repo costs nothing. Advisory: it returns no
+#               permission decision and never mutates the repo.
+#   (no args)   Human-readable report on stdout.
+#
+# Wired globally from .chezmoidata/claude-settings.yaml.
+
+set -uo pipefail
+
+FETCH_MAX_AGE=300                                          # --guard refetch age
+FETCH_TIMEOUT=8                                            # unreachable remote
+LATCH_TTL_DAYS=7                                           # stale latch pruning
+
+# Never let a credential prompt or a black-holed remote stall a tool call.
+export GIT_TERMINAL_PROMPT=0
+export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o ConnectTimeout=5}"
+
+mode="${1:-}"
+payload=''
+case "$mode" in
+  --session | --guard)
+    command -v jq >/dev/null 2>&1 || exit 0
+    payload="$(cat)"
+    ;;
+esac
+
+cwd=''
+session=''
+tool=''
+cmd=''
+if [ -n "$payload" ]; then
+  IFS=$'\t' read -r cwd session tool cmd <<EOF
+$(printf '%s' "$payload" | jq -r '[.cwd, .session_id, .tool_name, (.tool_input.command // "")] | @tsv')
+EOF
+fi
+
+if [ -n "$cwd" ] && [ -d "$cwd" ]; then
+  cd "$cwd" || exit 0
+fi
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 0
+
+# Bash covers work done through scripts and Makefiles, but only commands that
+# write history care which branch we are on.
+if [ "$mode" = --guard ] && [ "$tool" = Bash ]; then
+  printf '%s' "$cmd" |
+    grep -Eq '\bgit\b.*\b(commit|push|merge|rebase|cherry-pick|revert)\b' || exit 0
+fi
+
+fetch_age() {
+  local head epoch
+  head="$(git rev-parse --git-path FETCH_HEAD 2>/dev/null)"
+  if [ -n "$head" ] && [ -f "$head" ]; then
+    epoch="$(stat -f %m "$head" 2>/dev/null || stat -c %Y "$head" 2>/dev/null || printf 0)"
+    printf '%s' "$(($(date +%s) - epoch))"
+  else
+    printf 999999
+  fi
+}
+
+human_age() {
+  if   [ "$1" -ge 999999 ]; then printf never
+  elif [ "$1" -lt 60 ];     then printf moments
+  elif [ "$1" -lt 3600 ];   then printf '%dm' "$(($1 / 60))"
+  elif [ "$1" -lt 86400 ];  then printf '%dh' "$(($1 / 3600))"
+  else                           printf '%dd' "$(($1 / 86400))"
+  fi
+}
+
+# Polled rather than timeout(1): coreutils is not a given on macOS, and a
+# report built on refs we could not refresh must say so rather than imply
+# the numbers are current.
+fetch_state=none
+run_fetch() {
+  local pid waited=0 limit=$((FETCH_TIMEOUT * 5))
+  git fetch --quiet --prune >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$limit" ]; do
+    sleep 0.2
+    waited=$((waited + 1))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+    fetch_state=timeout
+  elif wait "$pid"; then
+    fetch_state=ok
+  else
+    fetch_state=failed
+  fi
+}
+
+branch="$(git symbolic-ref --quiet --short HEAD 2>/dev/null)"
+detached=0
+if [ -z "$branch" ]; then
+  detached=1
+  branch="$(git rev-parse --short HEAD 2>/dev/null || printf unknown)"
+fi
+
+default_branch="$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|^origin/||')"
+if [ -z "$default_branch" ]; then
+  for candidate in main master; do
+    if git show-ref --verify --quiet "refs/remotes/origin/$candidate"; then
+      default_branch="$candidate"
+      break
+    fi
+  done
+fi
+
+has_remote=1
+[ -z "$(git remote 2>/dev/null)" ] && has_remote=0
+
+if [ "$has_remote" = 1 ]; then
+  case "$mode" in
+    --guard) [ "$(fetch_age)" -gt "$FETCH_MAX_AGE" ] && run_fetch ;;
+    *) run_fetch ;;
+  esac
+fi
+
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)"
+ahead=0
+behind=0
+if [ -n "$upstream" ]; then
+  behind="$(git rev-list --count "HEAD..$upstream" 2>/dev/null || printf 0)"
+  ahead="$(git rev-list --count "$upstream..HEAD" 2>/dev/null || printf 0)"
+fi
+
+on_default=0
+if [ "$detached" = 0 ] && [ -n "$default_branch" ] && [ "$branch" = "$default_branch" ]; then
+  on_default=1
+fi
+
+drift=0
+if [ "$on_default" = 0 ] && [ -n "$default_branch" ] &&
+  git show-ref --verify --quiet "refs/remotes/origin/$default_branch"; then
+  drift="$(git rev-list --count "HEAD..origin/$default_branch" 2>/dev/null || printf 0)"
+fi
+
+dirty="$(git status --porcelain 2>/dev/null | grep -c . || true)"
+
+case "$fetch_state" in
+  ok) refs="fetched just now" ;;
+  timeout) refs="refs STALE — fetch timed out after ${FETCH_TIMEOUT}s" ;;
+  failed) refs="refs STALE — fetch failed (offline or no access)" ;;
+  *)
+    if [ "$has_remote" = 0 ]; then
+      refs="no remote configured"
+    else
+      refs="refs fetched $(human_age "$(fetch_age)") ago"
+    fi
+    ;;
+esac
+
+if [ "$detached" = 1 ]; then
+  position="detached HEAD at $branch"
+elif [ -n "$upstream" ]; then
+  position="$branch → $upstream · ahead $ahead, behind $behind"
+else
+  position="$branch → no upstream"
+fi
+[ "$dirty" -gt 0 ] && position="$position · $dirty uncommitted"
+
+report="git: $position"$'\n'
+if [ "$drift" -gt 0 ]; then
+  report="$report     origin/$default_branch has $drift commit(s) not in this branch"$'\n'
+fi
+report="$report     $refs"
+
+warn=''
+note() { warn="$warn  $1"$'\n'; }
+[ "$detached" = 1 ] && note "detached HEAD at $branch — commits here belong to no branch"
+[ "$on_default" = 1 ] && note "on '$branch' — the default branch"
+[ "$behind" -gt 0 ] && note "behind $upstream by $behind commit(s)"
+[ "$drift" -gt 0 ] && note "origin/$default_branch has $drift commit(s) not in this branch"
+case "$fetch_state" in
+  timeout | failed) note "$refs — the counts above may be out of date" ;;
+esac
+
+emit() {
+  jq -nc --arg event "$1" --arg ctx "$2" \
+    '{hookSpecificOutput: {hookEventName: $event, additionalContext: $ctx}}'
+}
+
+case "$mode" in
+  --session)
+    emit SessionStart "$report"
+    ;;
+  --guard)
+    [ -z "$warn" ] && exit 0
+    # One voice per distinct problem: repeat warnings are silent, but a
+    # position that degrades mid-session speaks again. The signature is
+    # flattened to one line so it survives command substitution intact.
+    signature="$(printf '%s' "$warn" | tr '\n' '·')"
+    latch_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-git-guard"
+    mkdir -p "$latch_dir" 2>/dev/null
+    find "$latch_dir" -type f -mtime "+$LATCH_TTL_DAYS" -delete 2>/dev/null
+    latch="$latch_dir/$(printf '%s' "${session:-unknown}" | tr -cd '[:alnum:]._-')"
+    [ -f "$latch" ] && [ "$(cat "$latch" 2>/dev/null)" = "$signature" ] && exit 0
+    printf '%s' "$signature" >"$latch"
+    emit PreToolUse "git state before this tool call:
+$warn  $refs
+Decide whether to pull, branch, or proceed deliberately."
+    ;;
+  *)
+    printf '%s\n' "$report"
+    [ -n "$warn" ] && printf 'suspect:\n%s' "$warn"
+    ;;
+esac
+exit 0

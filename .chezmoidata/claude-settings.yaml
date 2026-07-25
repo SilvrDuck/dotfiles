@@ -11,6 +11,19 @@ claude_settings:
   statusLine:
     type: command
     command: bash ~/.claude/statusline.sh
+  hooks:
+    SessionStart:
+      - hooks:
+          - type: command
+            command: $HOME/.claude/hooks/git-context --session
+            timeout: 15
+            statusMessage: Checking git state
+    PreToolUse:
+      - matcher: Edit|Write|MultiEdit|NotebookEdit|Bash
+        hooks:
+          - type: command
+            command: $HOME/.claude/hooks/git-context --guard
+            timeout: 15
   enabledPlugins:
     frontend-design@claude-plugins-official: true
     superpowers@claude-plugins-official: true
