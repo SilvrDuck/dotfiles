@@ -1,21 +1,34 @@
+{{- /* can_sudo reaches a machine's config only at `chezmoi init`, so machines
+       set up before it existed have no such key -- and those had sudo. */ -}}
+{{- $canSudo := true -}}
+{{- if hasKey . "can_sudo" }}{{ $canSudo = .can_sudo }}{{ end -}}
 #!/usr/bin/env bash
 # If MacOS: installs brew
 # If Linux: check for apt or pacman
+# Without sudo: installs mise, which stands in for the system package manager.
 set -euo pipefail
 
+{{ if $canSudo -}}
 if command -v sudo >/dev/null 2>&1; then
   SUDO=sudo
 else
   SUDO=
 fi
+{{ else -}}
+# Not an admin here: sudo may well exist, so leaving SUDO empty is what keeps
+# every `$SUDO ...` below from stalling the apply on a password prompt.
+SUDO=
+{{ end -}}
 
 {{ if eq .chezmoi.os "darwin" -}}
+{{ if $canSudo -}}
 if ! command -v brew >/dev/null 2>&1; then
   echo "[prereqs] Installing Homebrew"
   # NONINTERACTIVE skips the "press RETURN" prompt; sudo prompt still appears
   # on a fresh machine because /opt/homebrew creation needs root.
   NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
+{{ end -}}
 
 if [ -x /opt/homebrew/bin/brew ]; then
   eval "$(/opt/homebrew/bin/brew shellenv)"
@@ -23,6 +36,7 @@ elif [ -x /usr/local/bin/brew ]; then
   eval "$(/usr/local/bin/brew shellenv)"
 fi
 {{ else if eq .chezmoi.os "linux" -}}
+{{ if $canSudo -}}
 if command -v pacman >/dev/null 2>&1; then
   $SUDO pacman -Sy --needed --noconfirm git curl ca-certificates || true
 elif command -v apt-get >/dev/null 2>&1; then
@@ -30,5 +44,19 @@ elif command -v apt-get >/dev/null 2>&1; then
   $SUDO apt-get install -y curl git ca-certificates build-essential procps file || true
 else
   echo "[prereqs] Supported Linux package managers: pacman or apt-get. Continuing without package prereqs." >&2
+fi
+{{ end -}}
+{{ end -}}
+
+{{ if not $canSudo }}
+# Every system package manager needs root, so mise carries the CLI baseline
+# instead: its aqua/ubi backends unpack prebuilt binaries under ~/.local, and
+# dot_zshrc's `mise activate` puts them on PATH. Homebrew is left alone --
+# a home-prefix install gets no bottles and would build every formula from
+# source -- but an existing one is still used by the package step.
+mkdir -p "$HOME/.local/bin"
+if ! command -v mise >/dev/null 2>&1; then
+  echo "[prereqs] Installing mise"
+  curl -fsSL https://mise.run | sh || echo "[prereqs] mise install failed"
 fi
 {{ end -}}

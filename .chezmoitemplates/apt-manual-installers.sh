@@ -1,7 +1,9 @@
 # Manual installers for tools missing or stale in default Ubuntu/Debian apt repos.
 # Included via {{`{{ template "apt-manual-installers.sh" . }}`}} from
 # run_onchange_after_10-packages.sh.tmpl. Each install_manual_* is idempotent
-# (guards on `command -v` or a sentinel file) and safe to re-run.
+# (guards on `command -v` or a sentinel file) and safe to re-run. The ones that
+# need no root at all live in package-manager-helpers.sh, shared with machines
+# that have no package manager to fall back on.
 
 gh_latest_version() {
   # echoes the latest release tag without leading "v" (e.g. "0.61.1")
@@ -30,13 +32,6 @@ install_github_tar() {
     echo "[manual] $bin: download or extract failed"
   fi
   rm -rf "$tmp"
-}
-
-install_manual_antidote() {
-  if [ -r "$HOME/.local/share/antidote/antidote.zsh" ]; then return 0; fi
-  echo "[manual] antidote"
-  rm -rf "$HOME/.local/share/antidote"
-  git clone --depth 1 https://github.com/mattmc3/antidote.git "$HOME/.local/share/antidote" || true
 }
 
 install_manual_neovim() {
@@ -121,26 +116,6 @@ install_manual_lazygit() {
   fi
   install_github_tar lazygit \
     "https://github.com/jesseduffield/lazygit/releases/download/v${ver}/lazygit_${ver}_${arch}.tar.gz"
-}
-
-install_manual_jetbrains_mono_nerd() {
-  if fc-list 2>/dev/null | grep -qi "JetBrainsMono Nerd"; then return 0; fi
-  echo "[manual] JetBrains Mono Nerd Font"
-  # fontconfig (fc-cache) is in Ubuntu base; install it just in case.
-  command -v fc-cache >/dev/null 2>&1 || $SUDO apt-get install -y fontconfig >/dev/null 2>&1 || true
-  local font_dir="$HOME/.local/share/fonts/JetBrainsMono"
-  local tmp
-  tmp=$(mktemp -d)
-  if curl -fsSL -o "$tmp/font.tar.xz" \
-      "https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.tar.xz"; then
-    mkdir -p "$font_dir"
-    tar -C "$font_dir" -xJf "$tmp/font.tar.xz" \
-      && fc-cache -f "$font_dir" >/dev/null \
-      || echo "[manual] JetBrains Mono Nerd Font: install failed"
-  else
-    echo "[manual] JetBrains Mono Nerd Font: download failed"
-  fi
-  rm -rf "$tmp"
 }
 
 install_manual_xh() {

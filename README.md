@@ -20,6 +20,18 @@ Then:
 sudo -v && sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
 ```
 
+### If you can't sudo
+
+On a machine you are not an admin on:
+
+```sh
+NO_SUDO=1 sh -c "$(curl -fsLS https://get.chezmoi.io)" -- init --apply SilvrDuck
+```
+
+Nothing reaches for `sudo`. An already-installed Homebrew is still used; otherwise
+mise installs the CLI baseline into `~/.local`. Casks, GUI apps, and system packages
+like `zsh` are named in the install log and left to whoever does have admin.
+
 ## Scripts
 
 Interactive setup that needs a human: SSH keys, secrets, browser OAuth, GUI grants.

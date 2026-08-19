@@ -1,3 +1,7 @@
+{{- /* can_sudo reaches a machine's config only at `chezmoi init`, so machines
+       set up before it existed have no such key -- and those had sudo. */ -}}
+{{- $canSudo := true -}}
+{{- if hasKey . "can_sudo" }}{{ $canSudo = .can_sudo }}{{ end -}}
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -5,11 +9,17 @@ set -euo pipefail
 # package data hash: {{ include ".chezmoidata/packages.yaml" | sha256sum }}
 # choices hash: {{ $c := joinPath .chezmoi.homeDir ".config/dotfiles/package-choices" }}{{ if stat $c }}{{ output "cat" $c | sha256sum }}{{ else }}none{{ end }}
 
+{{ if $canSudo -}}
 if command -v sudo >/dev/null 2>&1; then
   SUDO=sudo
 else
   SUDO=
 fi
+{{ else -}}
+# Not an admin here: sudo may well exist, so leaving SUDO empty is what keeps
+# every `$SUDO ...` below from stalling the apply on a password prompt.
+SUDO=
+{{ end -}}
 
 # Flatten every package into one install list and remember which ones are
 # optional. Baseline packages install unconditionally; optional ones are
@@ -45,11 +55,41 @@ fi
 export HOMEBREW_NO_AUTO_UPDATE=1
 BREW_INSTALLED_FORMULAE="$(brew list --formula -1 2>/dev/null || true)"
 BREW_INSTALLED_CASKS="$(brew list --cask -1 2>/dev/null || true)"
+{{ end }}
 
 # -----------------------------------------------------------------------------
 # Install packages
 # -----------------------------------------------------------------------------
 
+{{ if not $canSudo }}
+{{ range $tool := $allTools }}
+{{ $kind := "brew" }}
+{{ $brew := "" }}
+{{ $spec := $tool }}
+{{ $manual := "" }}
+{{ $skip := false }}
+{{ if $.is_mac }}{{ $brew = $tool }}{{ end }}
+{{ with (index $.packages.overrides $tool) }}
+{{ if and $.is_mac (index . "darwin") }}{{ $brew = index . "darwin" }}{{ end }}
+{{ if and $.is_mac (index . "darwin_skip") }}{{ $skip = true }}{{ end }}
+{{ if and $.is_linux (index . "linux_skip") }}{{ $skip = true }}{{ end }}
+{{ if and (eq $.machine_kind "devcontainer") (index . "devcontainer_skip") }}{{ $skip = true }}{{ end }}
+{{ with (index . "mise") }}{{ $spec = . }}{{ end }}
+{{ with (index . "nosudo_manual") }}{{ $manual = . }}{{ end }}
+{{ if eq (index . "darwin_kind") "cask" }}{{ $kind = "cask" }}{{ $spec = "" }}{{ end }}
+{{ end }}
+{{ if not $skip }}
+{{ if hasKey $optional $tool }}if pkg_chosen {{ $tool | quote }}; then{{ end }}
+{{ if $manual }}
+install_manual_{{ $manual }}
+{{ else }}
+install_nosudo {{ $tool | quote }} {{ $kind | quote }} {{ $brew | quote }} {{ $spec | quote }}
+{{ end }}
+{{ if hasKey $optional $tool }}fi{{ end }}
+{{ end }}
+{{ end }}
+
+{{ else if eq .chezmoi.os "darwin" }}
 {{ range $tool := $allTools }}
 {{ $name := $tool }}
 {{ $kind := "brew" }}

@@ -61,8 +61,10 @@ zstyle ':fzf-tab:*' query-string prefix
 {{ if .is_mac -}}
 ANTIDOTE_ZSH="$(brew --prefix 2>/dev/null)/opt/antidote/share/antidote/antidote.zsh"
 
-if [ -r "$ANTIDOTE_ZSH" ]; then                            # antidote installed
+if [ -r "$ANTIDOTE_ZSH" ]; then                            # brew antidote
   source "$ANTIDOTE_ZSH"                                   # load antidote
+elif [ -r "$HOME/.local/share/antidote/antidote.zsh" ]; then
+  source "$HOME/.local/share/antidote/antidote.zsh"        # load antidote
 fi
 {{ else -}}
 if [ -r /usr/share/zsh-antidote/antidote.zsh ]; then       # distro antidote

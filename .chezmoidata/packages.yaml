@@ -118,12 +118,20 @@ packages:
     dust:
       apt: du-dust
 
+    git-delta:
+      mise: delta
+
+    procs:
+      # Absent from mise's registry; ubi pulls the GitHub release binary.
+      mise: ubi:dalance/procs
+
     font-jetbrains-mono-nerd-font:
       darwin_kind: cask
       pacman: ttf-jetbrains-mono-nerd
       # apt's fonts-jetbrains-mono is the regular font without nerd glyphs,
       # so pull the official Nerd Font tarball into ~/.local/share/fonts.
       apt_manual: jetbrains_mono_nerd
+      nosudo_manual: jetbrains_mono_nerd
       # GUI-only: a nerd font is dead weight on a headless devcontainer.
       devcontainer_skip: true
 
@@ -133,6 +141,7 @@ packages:
     antidote:
       pacman_aur: zsh-antidote
       apt_manual: antidote_git
+      nosudo_manual: antidote
 
     tree-sitter:
       apt: tree-sitter-cli

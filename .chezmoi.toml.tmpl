@@ -6,9 +6,11 @@
 {{-     $kind = "omarchy" -}}
 {{-   end -}}
 {{- end -}}
+{{- /* Override with NO_SUDO=1 before bootstrap on machines you are not admin on. */ -}}
 
 [data]
 machine_kind = {{ $kind | quote }}
+can_sudo = {{ ne (env "NO_SUDO") "1" }}
 is_mac = {{ eq .chezmoi.os "darwin" }}
 is_linux = {{ eq .chezmoi.os "linux" }}
 is_omarchy_detected = {{ and (eq .chezmoi.os "linux") (stat (joinPath .chezmoi.homeDir ".local/share/omarchy") | not | not) }}
