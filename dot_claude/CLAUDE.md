@@ -18,3 +18,9 @@ Never add `Co-Authored-By: Claude …` (or any other AI attribution trailer / si
 Write every artifact — code, comments, docstrings, commit messages, PRs, docs, and identifiers — so it reads as if produced in one shot from the final spec by someone who never saw this conversation: describe what the finished thing *is*, not how it came to be. Keep a comment only if a from-scratch author would still write it (a non-obvious *why* or an invariant); drop anything that only makes sense as a trace of our edits.
 
 My instructions are addressed to you, not to the artifact. Never echo a constraint I gave as a comment, heading, or name — if I ask for "no boilerplate", "keep it minimal", "make it safe", the output should simply *be* that, never announce it (`# no boilerplate`, `# minimal version`, `// safe: dry-runs by default`).
+
+# Subagent model routing
+Pick a model explicitly (`model` param) every time you spawn a subagent, sized to the task — never let it silently inherit the main model:
+- `haiku` — mechanical lookups, file/grep sweeps, fetching and summarizing a known page.
+- `sonnet` — the default: research, web digging, writing drafts, running and verifying code.
+- `opus` — only for work that genuinely needs deep reasoning (tricky architecture, subtle debugging, adversarial review) and say why when you choose it.
