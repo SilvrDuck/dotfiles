@@ -5,7 +5,8 @@
 # where <session> follows what the account reports. With usage-window
 # percentages, the slice of the 5-hour window this session accounts for
 # (the 5h figure scaled by the session's cost share of the active block),
-# then the 5h / 7d window figures; with a monthly budget set for this machine, the
+# then the 5h / 7d window figures, each followed by the local time it resets
+# (with the weekday for 7d); with a monthly budget set for this machine, the
 # session cost plus a month-to-date estimate against that budget; otherwise
 # the session cost alone.
 #
@@ -90,7 +91,10 @@ if [ "$rl" = "1" ]; then
   line="$line · $share"
   line="$line$(printf '%s' "$payload" | jq -r '
     def p($x): if $x == null then "?" else ($x | round | tostring) end;
-    " · 5h \(p(.rate_limits.five_hour.used_percentage))% · 7d \(p(.rate_limits.seven_day.used_percentage))%"')"
+    def at($fmt): if .resets_at then " → " + (.resets_at | strflocaltime($fmt)) else "" end;
+    .rate_limits
+    | " · 5h \(p(.five_hour.used_percentage))%\(.five_hour | at("%H:%M"))"
+    + " · 7d \(p(.seven_day.used_percentage))%\(.seven_day | at("%a %H:%M"))"')"
 elif [ "$LIMIT" != "0" ]; then
   line="$line$sess_cost"
   spent=$(read_cache "$CACHE_MONTH")
