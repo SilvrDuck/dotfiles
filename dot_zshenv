@@ -3,3 +3,10 @@
 # that need to be present before .zshrc would run.
 
 export _ZO_DOCTOR=0  # zoxide's "init last" rule is a false positive here
+
+# Rust toolchain (rustup)
+[ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
+
+# Android SDK (homebrew cmdline-tools)
+[ -d /opt/homebrew/share/android-commandlinetools ] && export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+[ -n "${ANDROID_HOME:-}" ] && export PATH="$ANDROID_HOME/platform-tools:$PATH"
