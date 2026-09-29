@@ -136,7 +136,7 @@ Rare manual procedures, documented not automated.
 | Shell + CLI stack (zsh · starship · nvim · eza/rg/fd/…) | ✓ | ✓ | ✓ |
 | Per-machine package picker + weekly auto-upgrade | ✓ | ✓ | ✓ |
 | AI CLIs + agent-skills fanout + MCP servers | ✓ | ✓ | ✓ |
-| Tiling WM (AeroSpace ↔ Hyprland/waybar) | ✓ | ✓ | — |
+| Tiling WM (AeroSpace ↔ Hyprland) | ✓ | ✓ | — |
 
 ### Utilities
 

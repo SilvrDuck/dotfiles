@@ -20,7 +20,7 @@ address=$(hyprctl clients -j |
   jq -r --arg p "$pattern" 'first(.[] | select(.class | test("\\b" + $p + "\\b"; "i")) | .address) // empty')
 
 if [[ -n $address ]]; then
-  hyprctl dispatch focuswindow "address:$address"
+  hyprctl dispatch "hl.dsp.focus({ window = \"address:$address\" })"
 else
   exec setsid "$@"
 fi

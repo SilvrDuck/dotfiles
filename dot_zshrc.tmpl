@@ -172,16 +172,6 @@ zle -N down-line-or-beginning-search                       # register down searc
 bindkey '^[[A' up-line-or-beginning-search                 # up searches prefix
 bindkey '^[[B' down-line-or-beginning-search               # down searches prefix
 
-{{ if eq .machine_kind "omarchy" -}}
-# -----------------------------------------------------------------------------
-# Omarchy prompt
-# -----------------------------------------------------------------------------
-
-if [ -f "$HOME/.config/omarchy/current/theme/starship.toml" ]; then
-  export STARSHIP_CONFIG="$HOME/.config/omarchy/current/theme/starship.toml"
-fi
-{{- end }}
-
 # -----------------------------------------------------------------------------
 # Prompt
 # -----------------------------------------------------------------------------

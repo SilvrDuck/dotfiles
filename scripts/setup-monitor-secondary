@@ -100,7 +100,7 @@ case "$(uname -s)" in
       values+=("$desc")
     done < <(hyprctl -j monitors | jq -r '.[] | "\(.name)\t\(.description)"')
 
-    apply_target="$HOME/.config/hypr/workspaces.conf"
+    apply_target="$HOME/.config/hypr/workspaces.lua"
     reload() { hyprctl reload; }
     ;;
 
