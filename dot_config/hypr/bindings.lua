@@ -44,8 +44,9 @@ bind("SUPER + CTRL + K", "Keybindings", "omarchy-menu-keybindings")
 
 -- Maximize on SUPER + ; and toggle split on SUPER + /, mirroring AeroSpace's
 -- alt-; and alt-/ on macOS. Monitor scaling (Omarchy's SUPER + [ALT +] /) has
--- no macOS equivalent and is dropped.
-hl.unbind("SUPER + F")
+-- no macOS equivalent and is dropped. SUPER + F keeps Omarchy's true fullscreen:
+-- the Mac side leaves alt-f free for EurKEY's AltGr+f compose, but Hyprland
+-- tells SUPER and AltGr apart, so no such concession is needed here.
 hl.unbind("SUPER + ALT + SLASH")
 bind("SUPER + semicolon", "Maximize (fill workspace)", hl.dsp.window.fullscreen({ mode = "maximized" }))
 bind("SUPER + SLASH", "Toggle window split", hl.dsp.layout("togglesplit"))
