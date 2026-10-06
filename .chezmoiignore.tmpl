@@ -15,3 +15,7 @@ Library
 {{ if .is_mac -}}
 .config/mimeapps.list
 {{ end -}}
+{{ if not .is_omarchy_detected -}}
+.local/bin/rotmain
+.local/bin/rotsec
+{{ end -}}

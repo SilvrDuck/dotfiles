@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Toggle a monitor between landscape and portrait on Omarchy. Installed as
+# `rotmain` (main monitor) and, through a symlink, `rotsec` (secondary); the
+# role comes from the name it is invoked by.
+#
+# Roles are the monitor descriptions in the local chezmoi data, monitor_main
+# and monitor_secondary, the keys that also pin workspaces. Without
+# monitor_main, main is the external monitor that is not the secondary.
+#
+# The rotation is an Omarchy Hyprland toggle: an hl.monitor rule written to
+# the toggles directory, which loads after monitors.lua on every reload, so it
+# holds until run again, which removes it. Hyprland fills any field a rule
+# omits with its default, so the rule repeats the live mode, position and
+# scale alongside the new transform.
+#
+# Usage: rotmain | rotsec
+
+set -euo pipefail
+
+# Portrait transform: 1 = 90°, 3 = 270°. Flip it if the picture is upside down.
+PORTRAIT=1
+
+cmd=$(basename "$0")
+case "$cmd" in
+  rotmain) role=main ;;
+  rotsec) role=sec ;;
+  *) echo "Run as rotmain or rotsec" >&2; exit 2 ;;
+esac
+if (($#)); then
+  echo "Usage: $cmd" >&2
+  exit 2
+fi
+
+for tool in chezmoi hyprctl jq; do
+  command -v "$tool" >/dev/null 2>&1 || { echo "$tool is required." >&2; exit 1; }
+done
+
+monitors=$(hyprctl -j monitors)
+desc=$(chezmoi data --format json | jq -r --arg role "$role" --argjson monitors "$monitors" '
+  (.monitor_main // "") as $main | (.monitor_secondary // "") as $sec
+  | if $role == "sec" then $sec
+    elif $main != "" then $main
+    else [$monitors[] | select(.description != $sec and (.name | test("^(eDP|LVDS|DSI)-") | not))]
+         | if length == 1 then .[0].description else "" end
+    end')
+if [[ -z $desc ]]; then
+  echo "No $role monitor: set monitor_main / monitor_secondary in ~/.config/chezmoi/chezmoi.toml" >&2
+  exit 1
+fi
+
+flag="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/toggles/hypr/$cmd.lua"
+if [[ -f $flag ]]; then
+  rm -f "$flag"
+  hyprctl reload >/dev/null
+  echo "$role: configured orientation restored"
+  exit 0
+fi
+
+# Width and height trade places in portrait. When another monitor sits flush to
+# the right, the rotated one keeps its right edge in place so the two stay
+# adjacent and the pointer can still cross.
+out=$(jq -r --arg desc "$desc" --argjson portrait "$PORTRAIT" '
+  (.[] | select(.description == $desc)) as $m
+  | (if $m.transform == 0 then $portrait else 0 end) as $t
+  | ((if $m.transform % 2 == 1 then $m.height else $m.width end) / $m.scale | round) as $w_now
+  | ((if $t % 2 == 1 then $m.height else $m.width end) / $m.scale | round) as $w_new
+  | (if any(.[]; .x == $m.x + $w_now) then $m.x + $w_now - $w_new else $m.x end) as $x
+  | "\($m.name)\t\($t)\thl.monitor({ output = \"\($m.name)\", mode = \"\($m.width)x\($m.height)@\($m.refreshRate)\", position = \"\($x)x\($m.y)\", scale = \($m.scale), transform = \($t) })"
+' <<<"$monitors")
+if [[ -z $out ]]; then
+  echo "$role monitor is not connected: $desc" >&2
+  exit 1
+fi
+IFS=$'\t' read -r name transform rule <<<"$out"
+
+# The rule is Lua that runs on every reload, so refuse anything but a plain rule.
+shape='^hl\.monitor\(\{ output = "[A-Za-z0-9._-]+", mode = "[0-9]+x[0-9]+@[0-9.]+", position = "-?[0-9]+x-?[0-9]+", scale = [0-9.]+, transform = [0-7] \}\)$'
+if [[ ! $rule =~ $shape ]]; then
+  echo "Refusing unexpected monitor values: $rule" >&2
+  exit 1
+fi
+
+mkdir -p "$(dirname "$flag")"
+printf '%s\n' "$rule" >"$flag"
+hyprctl reload >/dev/null
+if [[ $transform == 0 ]]; then
+  echo "$role ($name): landscape"
+else
+  echo "$role ($name): portrait"
+fi
