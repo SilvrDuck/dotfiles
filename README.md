@@ -147,6 +147,7 @@ Rare manual procedures, documented not automated.
 - `fleet` captures a fleeting note into the Obsidian vault (also the command on ctrl+alt+super+Space).
 - `android-hotspot` (mac only, ⌃⌥⌘B) starts your phone's Wi-Fi hotspot over Bluetooth without touching the phone. Per-machine setup under [macOS manual setups](#macos-manual-setups).
 - `bt-sleep` turns Bluetooth off on sleep and back on at wake.
+- `rotmain` / `rotsec` (Omarchy only) toggle the main or secondary monitor between landscape and portrait; `cw`, `ccw` or `flip` turn it a further quarter or half turn.
 - `ob` opens the Obsidian vault in nvim.
 - `cc` / `ccc` / `ccr` run Claude at `--effort xhigh`: plain, continue, resume.
 
