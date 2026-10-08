@@ -7,7 +7,6 @@ claude_settings:
       - Write(~/.claude/host-notes.md)
   theme: dark
   skipAutoPermissionPrompt: true
-  effortLevel: xhigh
   statusLine:
     type: command
     command: bash ~/.claude/statusline.sh
