@@ -149,5 +149,5 @@ Rare manual procedures, documented not automated.
 - `bt-sleep` turns Bluetooth off on sleep and back on at wake.
 - `rotmain` / `rotsec` (Omarchy only) toggle the main or secondary monitor between landscape and portrait; `cw`, `ccw` or `flip` turn it a further quarter or half turn.
 - `ob` opens the Obsidian vault in nvim.
-- `cc` / `ccc` / `ccr` run Claude at `--effort xhigh`: plain, continue, resume.
+- `cc` / `ccc` / `ccr` run Claude: plain, continue, resume.
 
