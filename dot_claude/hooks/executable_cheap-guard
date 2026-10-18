@@ -231,14 +231,21 @@ last_call() {
 # reply plus everything since. Within CACHE_WARM of the last call, the
 # prompt is priced as a cache read; otherwise all of it as a fresh 1h cache
 # write. Input can never exceed MAX_CONTEXT, whatever the estimate. The
-# reply is capped by the max_tokens of the agent's latest logged request,
-# or MAX_OUTPUT when none is logged.
+# reply is capped by the largest max_tokens among the agent's own recent
+# logged requests for that model, or MAX_OUTPUT when none is logged.
 worst_case() {
   local t info ts model ctx added prefix=0 out pin pout
   t="$(transcript_of "$1")"
   info="$(last_call "$t")"
-  out="$( { [ -f "$t" ] && reverse "$t"; } | grep -m1 '"type":"api-request",' |
-    grep -o '"max_tokens":[0-9]*' | head -n 1 | tr -dc 0-9)"
+  out=''
+  if [[ $info == *$'\t'* ]]; then
+    out="$(reverse "$t" | grep -m20 '"type":"api-request",' |
+      jq -sr --arg m "$(cut -f2 <<<"$info")" '
+        map(select((.querySource // "") as $q | $q == "repl_main_thread" or ($q | startswith("agent:")))
+            | select(.params.model == $m) | .params.max_tokens
+            | select(type == "number" and . > 0 and . == floor))
+        | max // empty' 2>/dev/null)"
+  fi
   [ -n "$out" ] || out=$MAX_OUTPUT
   if [[ $info == *$'\t'* ]]; then
     IFS=$'\t' read -r ts model ctx added _ prefix <<<"$info"
