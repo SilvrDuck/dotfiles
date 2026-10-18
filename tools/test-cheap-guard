@@ -186,6 +186,13 @@ usage 20 10
 CHEAP_WAIT_DEADLINE=1 hook s14 PostToolBatch >/dev/null
 check "a warm cache prices the prompt as a read" "$(res s14 '.main.cost * 10000 | round')" 26076
 
+# A logged request caps the reply at its max_tokens: 64000 * $20 = $1.28
+# instead of 128000 * $20 = $2.56.
+jq -nc '{type: "api-request", params: {model: "claude-opus-5-5", max_tokens: 64000}}' >"$WORK/s14.req"
+cat "$WORK/s14.req" "$WORK/s14.jsonl" >"$WORK/s14.tmp" && mv "$WORK/s14.tmp" "$WORK/s14.jsonl"
+CHEAP_WAIT_DEADLINE=1 hook s14 PostToolBatch >/dev/null
+check "the logged max_tokens caps the reply" "$(res s14 '.main.cost * 10000 | round')" 13276
+
 # --- readings -------------------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s5" && touch "$CHEAP_STATE/sessions/s5/on"
 echo '{"nope":1}' >"$CHEAP_USAGE_FILE"

@@ -20,8 +20,8 @@
 # where cost is list-price dollars and rate_w is % of the window per dollar.
 # A call's worst case prices its context as an uncached 1h cache write (or,
 # right after the agent's previous call, the re-sent prompt as a cache read;
-# an evicted cache can then overshoot by that one call) plus MAX_OUTPUT
-# output tokens; once it finishes, its actual cost stands in
+# an evicted cache can then overshoot by that one call) plus a reply as long
+# as the request allows; once it finishes, its actual cost stands in
 # until a reading has had time to include it.
 #
 # rate_w is calibrated from a machine-wide window history that every
@@ -43,7 +43,7 @@ OUTSIDE_RESERVE=1                                          # other devices' spen
 SAFETY=1.25                                                # rate model error
 PRIOR_RATE=3                                               # %/$ until calibrated
 MIN_SPAN=1.5                                               # $ to trust a rate
-MAX_OUTPUT=128000                                          # output tokens a call
+MAX_OUTPUT=128000                                          # reply cap, none logged
 FIRST_CALL_CONTEXT=150000                                  # tokens, no transcript
 MAX_CONTEXT=1000000                                        # largest context window
 IMAGE_TOKENS=8000                                          # above any image's cost
@@ -230,10 +230,16 @@ last_call() {
 # The next call re-sends the last call's prompt and appends that call's
 # reply plus everything since. Within CACHE_WARM of the last call, the
 # prompt is priced as a cache read; otherwise all of it as a fresh 1h cache
-# write. Input can never exceed MAX_CONTEXT, whatever the estimate.
+# write. Input can never exceed MAX_CONTEXT, whatever the estimate. The
+# reply is capped by the max_tokens of the agent's latest logged request,
+# or MAX_OUTPUT when none is logged.
 worst_case() {
-  local info ts model ctx added prefix=0 pin pout
-  info="$(last_call "$(transcript_of "$1")")"
+  local t info ts model ctx added prefix=0 out pin pout
+  t="$(transcript_of "$1")"
+  info="$(last_call "$t")"
+  out="$( { [ -f "$t" ] && reverse "$t"; } | grep -m1 '"type":"api-request",' |
+    grep -o '"max_tokens":[0-9]*' | head -n 1 | tr -dc 0-9)"
+  [ -n "$out" ] || out=$MAX_OUTPUT
   if [[ $info == *$'\t'* ]]; then
     IFS=$'\t' read -r ts model ctx added _ prefix <<<"$info"
     [ $(($(now) - ${ts%.*})) -le "$CACHE_WARM" ] || prefix=0
@@ -245,7 +251,7 @@ worst_case() {
   fi
   read -r pin pout <<<"$(price "$model")"
   awk -v c="$ctx" -v a="$added" -v p="$prefix" -v cap="$MAX_CONTEXT" -v i="$pin" -v o="$pout" \
-    -v m="$MAX_OUTPUT" -v id="$model" 'BEGIN {
+    -v m="$out" -v id="$model" 'BEGIN {
       n = c + a; if (n > cap) n = cap; if (p > n) p = n
       printf "%.4f %s", ((p * 0.1 + (n - p) * 2) * i + m * o) / 1e6, id }'
 }
