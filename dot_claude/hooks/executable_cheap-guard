@@ -200,9 +200,10 @@ fetch_usage() {
     code=200
   else
     token="$(oauth_token)" || return 1
-    code="$(curl -sS -m 10 -o "$body" -D "$head" -w '%{http_code}' \
-      -H "Authorization: Bearer $token" -H 'anthropic-beta: oauth-2025-04-20' \
-      "$USAGE_URL" 2>/dev/null)"
+    # The token goes in on stdin: argv is readable by every local user.
+    code="$(printf 'Authorization: Bearer %s\n' "$token" |
+      curl -sS -m 10 -o "$body" -D "$head" -w '%{http_code}' \
+        -H @- -H 'anthropic-beta: oauth-2025-04-20' "$USAGE_URL" 2>/dev/null)"
   fi
   case "$code" in
     200)
