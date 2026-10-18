@@ -43,6 +43,8 @@ PRIOR_RATE=3                                               # %/$ until calibrate
 MIN_SPAN=1.5                                               # $ to trust a rate
 MAX_OUTPUT=128000                                          # output tokens a call
 FIRST_CALL_CONTEXT=150000                                  # tokens, no transcript
+MAX_CONTEXT=1000000                                        # largest context window
+IMAGE_TOKENS=8000                                          # above any image's cost
 SL_FRESH=60                                                # statusline reading age
 API_TTL=30                                                 # endpoint reading age
 REFLECT_LAG=60                                             # usage accounting lag
@@ -174,6 +176,9 @@ transcript_of() {
 
 # The agent's latest model call as TSV: epoch, model, context tokens, tokens
 # appended since, actual cost. Before its first call: only the appended count.
+# Synthetic entries (interruptions, errors) carry no usage and are skipped.
+# Text counts at 3 characters a token; an embedded image costs IMAGE_TOKENS
+# whatever the length of its base64.
 last_call() {
   local t="$1" after line
   [ -f "$t" ] || { echo 0; return; }
@@ -195,14 +200,24 @@ last_call() {
     else
       echo $((after / 3))
     fi
-  } < <(reverse "$t" | awk '
-    index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") { print after + 0; print; found = 1; exit }
-    { after += length($0) + 1 }
+  } < <(reverse "$t" | awk -v image=$((IMAGE_TOKENS * 3)) '
+    index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") &&
+      !index($0, "\"model\":\"<synthetic>\"") { print after + 0; print; found = 1; exit }
+    {
+      len = length($0) + 1
+      rest = $0
+      while (match(rest, /"type":"image","source":\{"type":"base64","data":"[A-Za-z0-9+\/=]+"/)) {
+        len += image - RLENGTH
+        rest = substr(rest, RSTART + RLENGTH)
+      }
+      after += len
+    }
     END { if (!found) print after + 0 }')
 }
 
+# A request's input can never exceed MAX_CONTEXT, whatever the estimate.
 worst_case() {
-  local info ts model ctx added fallback pin pout
+  local info ts model ctx added pin pout
   info="$(last_call "$(transcript_of "$1")")"
   if [[ $info == *$'\t'* ]]; then
     IFS=$'\t' read -r ts model ctx added _ <<<"$info"
@@ -213,8 +228,8 @@ worst_case() {
     added="$info"
   fi
   read -r pin pout <<<"$(price "$model")"
-  awk -v c="$ctx" -v a="$added" -v i="$pin" -v o="$pout" -v m="$MAX_OUTPUT" -v id="$model" \
-    'BEGIN { printf "%.4f %s", ((c + a) * 2 * i + m * o) / 1e6, id }'
+  awk -v c="$ctx" -v a="$added" -v cap="$MAX_CONTEXT" -v i="$pin" -v o="$pout" -v m="$MAX_OUTPUT" \
+    -v id="$model" 'BEGIN { n = c + a; if (n > cap) n = cap; printf "%.4f %s", (n * 2 * i + m * o) / 1e6, id }'
 }
 
 oauth_token() {

@@ -93,6 +93,7 @@ out="$(CHEAP_WAIT_DEADLINE=1 hook s3 PostToolBatch)"
 check "admits at 80%" "$out|$?" "|0"
 check "reserves the worst case" "$(res s3 '.main.cost * 100 | round')" 336
 
+transcript "$WORK/s3.jsonl" claude-opus-5-5 99000 1000
 hook s3 PreToolUse '{"tool_name":"Bash"}' >/dev/null
 check "PreToolUse ends the call" "$(res s3 '.main.end != null')" true
 check "actual cost replaces worst case" "$(res s3 '.main.cost * 10000 | round')" 596
@@ -139,6 +140,34 @@ hook s10 PreToolUse '{"tool_name":"Bash"}' >/dev/null
 out="$(CHEAP_WAIT_DEADLINE=1 hook s10 PostToolBatch)"
 check "Fable call is held by the Fable window" "$(jq -r .continue <<<"$out")" false
 check "hold names the Fable window" "$(grep -c 'scoped:Fable' "$CHEAP_STATE/sessions/s10/waiting")" 1
+
+# --- estimate -------------------------------------------------------------
+# Same Opus 5.5 call as above ($3.36); a synthetic entry after it is not a
+# call, and a 300k-character screenshot costs 8000 tokens ($0.064).
+mkdir -p "$CHEAP_STATE/sessions/s12" && touch "$CHEAP_STATE/sessions/s12/on"
+usage 20 10
+transcript "$WORK/s12.jsonl" claude-opus-5-5 99000 1000
+jq -nc '{type: "assistant", timestamp: "2026-01-01T00:00:00.000Z",
+  message: {model: "<synthetic>", usage: {input_tokens: 0, output_tokens: 0}}}' >>"$WORK/s12.jsonl"
+CHEAP_WAIT_DEADLINE=1 hook s12 PostToolBatch >/dev/null
+check "synthetic entries are not calls" "$(res s12 '.main.cost * 100 | round')" 336
+head -c 225000 /dev/zero | base64 | tr -d '\n' >"$WORK/image.b64"
+jq -nc --rawfile d "$WORK/image.b64" '{type: "user", message: {content: [{type: "tool_result",
+  content: [{type: "image", source: {type: "base64", data: $d}}]}]}}' >>"$WORK/s12.jsonl"
+CHEAP_WAIT_DEADLINE=1 hook s12 PostToolBatch >/dev/null
+check "an image costs a fixed allowance" "$(res s12 '.main.cost * 100 | round')" 342
+
+# 900k context plus ~200k tokens of new text caps at 1M input:
+# (1e6 * 2 * $10 + 128000 * $50) / 1e6 = $26.40.
+mkdir -p "$CHEAP_STATE/sessions/s13" && touch "$CHEAP_STATE/sessions/s13/on"
+transcript "$WORK/s13.jsonl" claude-fable-5-1 899000 1000
+head -c 600000 /dev/zero | tr '\0' 'x' >"$WORK/text.txt"
+jq -nc --rawfile t "$WORK/text.txt" '{type: "user", message: {content: $t}}' >>"$WORK/s13.jsonl"
+usage 5 1
+jq -nc --argjson now "$(date +%s)" '{five_hour: {rate: 0.5, span: 100, ts: $now},
+  weekly_ratio: {q: 0.2, span: 100, ts: $now}}' >"$CHEAP_STATE/rates.json"
+CHEAP_WAIT_DEADLINE=1 hook s13 PostToolBatch >/dev/null
+check "input is capped at the context window" "$(res s13 '.main.cost * 100 | round')" 2640
 
 # --- readings -------------------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s5" && touch "$CHEAP_STATE/sessions/s5/on"
