@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# Exercise dot_claude/hooks/executable_cheap-guard against synthetic hook
+# payloads, a fake usage endpoint and fake transcripts. Spends nothing.
+#
+#   tools/test-cheap-guard
+
+set -uo pipefail
+
+GUARD="$(cd "$(dirname "$0")/.." && pwd)/dot_claude/hooks/executable_cheap-guard"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+export CHEAP_STATE="$WORK/state"
+export CHEAP_USAGE_FILE="$WORK/usage.json"
+mkdir -p "$CHEAP_STATE"
+
+pass=0
+fail=0
+check() {
+  if [ "$2" = "$3" ]; then
+    pass=$((pass + 1))
+  else
+    fail=$((fail + 1))
+    printf 'FAIL %s\n  expected: %s\n  actual:   %s\n' "$1" "$3" "$2"
+  fi
+}
+
+# Endpoint body in the live shape; $1 = 5h %, $2 = weekly %, $3 = Fable %.
+usage() {
+  local reset5 reset7
+  reset5="$(jq -nr 'now + 10800 | strftime("%Y-%m-%dT%H:%M:%S.000000+00:00")')"
+  reset7="$(jq -nr 'now + 259200 | strftime("%Y-%m-%dT%H:%M:%S.000000+00:00")')"
+  jq -n --argjson p5 "$1" --argjson p7 "$2" --argjson ps "${3:-1}" --arg r5 "$reset5" --arg r7 "$reset7" '{
+    five_hour: {utilization: $p5, resets_at: $r5},
+    seven_day: {utilization: $p7, resets_at: $r7},
+    limits: [
+      {kind: "session", percent: $p5, resets_at: $r5},
+      {kind: "weekly_all", percent: $p7, resets_at: $r7},
+      {kind: "weekly_scoped", percent: $ps, resets_at: $r7, scope: {model: {display_name: "Fable"}}}],
+    weekly_scoped_shares: [{limit_index: 2, allowance_percent_of_weekly: 50}]}' >"$CHEAP_USAGE_FILE"
+  rm -f "$CHEAP_STATE/usage.json" "$CHEAP_STATE/usage.backoff"
+}
+
+# One assistant entry: model, total context tokens (as cache reads), output.
+transcript() {
+  jq -nc --arg m "$2" --argjson ctx "$3" --argjson out "$4" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+    '{type: "assistant", timestamp: $ts, message: {model: $m,
+      usage: {input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: $ctx, output_tokens: $out}}}' >"$1"
+}
+
+hook() {
+  local sid="$1" event="$2" extra="${3:-{\}}"
+  jq -nc --arg s "$sid" --arg e "$event" --arg t "$WORK/$sid.jsonl" --argjson x "$extra" \
+    '{session_id: $s, transcript_path: $t, hook_event_name: $e} + $x' | "$GUARD"
+}
+
+res() { jq -c "$2" "$CHEAP_STATE/sessions/$1/reservations.json" 2>/dev/null; }
+
+# --- sessions without the mode ---------------------------------------------
+usage 50 10
+out="$(hook plain PostToolBatch)"
+check "plain session: gate is silent" "$out|$?" "|0"
+out="$(hook plain UserPromptSubmit '{"prompt":"hello /cheap"}')"
+check "plain session: /cheap mid-prompt ignored" "$out" ""
+check "plain session: no state" "$(ls "$CHEAP_STATE/sessions" 2>/dev/null)" ""
+
+# --- toggling -------------------------------------------------------------
+out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap"}')"
+check "/cheap blocks the prompt" "$(jq -r .decision <<<"$out")" block
+check "/cheap reports status" "$(jq -r '.reason | startswith("cheap: on")' <<<"$out")" true
+check "/cheap sets the flag" "$(test -e "$CHEAP_STATE/sessions/s1/on" && echo y)" y
+
+out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap status"}')"
+check "/cheap status blocks" "$(jq -r .decision <<<"$out")" block
+
+out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap off"}')"
+check "/cheap off" "$(jq -r .reason <<<"$out")" "cheap: off"
+check "/cheap off clears state" "$(test -e "$CHEAP_STATE/sessions/s1" && echo y)" ""
+
+out="$(CHEAP_WAIT_DEADLINE=1 hook s2 UserPromptSubmit '{"prompt":"/cheap fix the build"}')"
+check "/cheap <task> lets the prompt through" "$out|$?" "|0"
+check "/cheap <task> sets the flag" "$(test -e "$CHEAP_STATE/sessions/s2/on" && echo y)" y
+check "/cheap <task> reserves the main call" "$(res s2 '.main.end')" null
+
+# --- worst case and admission ----------------------------------------------
+# Opus 5.5, 100k context: (100000 * 2 * $4 + 128000 * $20) / 1e6 = $3.36.
+# Its actual cost is 99k cache reads at $0.40 + 1k output at $20 = $0.0596.
+# Uncalibrated, 3 %/$ * 1.25 = 3.75 %/$: a lone call needs 12.6% + 1%.
+mkdir -p "$CHEAP_STATE/sessions/s3" && touch "$CHEAP_STATE/sessions/s3/on"
+transcript "$WORK/s3.jsonl" claude-opus-5-5 99000 1000
+usage 80 10
+out="$(CHEAP_WAIT_DEADLINE=1 hook s3 PostToolBatch)"
+check "admits at 80%" "$out|$?" "|0"
+check "reserves the worst case" "$(res s3 '.main.cost * 100 | round')" 336
+
+hook s3 PreToolUse '{"tool_name":"Bash"}' >/dev/null
+check "PreToolUse ends the call" "$(res s3 '.main.end != null')" true
+check "actual cost replaces worst case" "$(res s3 '.main.cost * 10000 | round')" 596
+
+usage 86 10
+start=$(date +%s)
+out="$(CHEAP_WAIT_DEADLINE=1 hook s3 PostToolBatch)"
+check "holds at 86% (stops at deadline)" "$(jq -r .continue <<<"$out")" false
+check "hold waits out its deadline" "$(($(date +%s) - start >= 1))" 1
+check "hold writes the waiting marker" "$(test -s "$CHEAP_STATE/sessions/s3/waiting" && echo y)" y
+
+out="$(CHEAP_WAIT_DEADLINE=1 hook s3 SubagentStart '{"agent_id":"a1","agent_type":"x"}')"
+check "SubagentStart at deadline stays silent" "$out" ""
+
+# --- in-flight accounting ---------------------------------------------------
+# Unknown-model first calls price at Fable: (150000*2*10 + 128000*50)/1e6
+# = $9.40, i.e. 35.25% of the 5h window each at the prior rate. A weekly
+# rate as calibration would find it keeps the scoped window out of the way.
+mkdir -p "$CHEAP_STATE/sessions/s4" && touch "$CHEAP_STATE/sessions/s4/on"
+jq -nc --argjson now "$(date +%s)" '{seven_day: {rate: 0.1, span: 100, ts: $now}}' >"$CHEAP_STATE/rates.json"
+usage 20 10
+CHEAP_WAIT_DEADLINE=1 hook s4 SubagentStart '{"agent_id":"b1","agent_type":"x"}' >/dev/null
+check "first subagent admitted" "$(res s4 '.b1.cost * 10 | round')" 94
+CHEAP_WAIT_DEADLINE=1 hook s4 SubagentStart '{"agent_id":"b2","agent_type":"x"}' >/dev/null
+check "second subagent admitted" "$(res s4 '.b2.cost * 10 | round')" 94
+out="$(CHEAP_WAIT_DEADLINE=1 hook s4 SubagentStart '{"agent_id":"b3","agent_type":"x"}')"
+check "third subagent held by in-flight calls" "$(res s4 '.b3')" null
+hook s4 SubagentStop '{"agent_id":"b1","agent_type":"x"}' >/dev/null
+jq '.b1.end -= 120' "$CHEAP_STATE/sessions/s4/reservations.json" >"$WORK/r" &&
+  mv "$WORK/r" "$CHEAP_STATE/sessions/s4/reservations.json"
+usage 20 10
+CHEAP_WAIT_DEADLINE=1 hook s4 SubagentStart '{"agent_id":"b3","agent_type":"x"}' >/dev/null
+check "reflected call frees headroom" "$(res s4 '[has("b1"), (.b3.cost * 10 | round)]')" '[false,94]'
+
+# Scoped weekly windows meter only calls that can run on their model.
+mkdir -p "$CHEAP_STATE/sessions/s10" && touch "$CHEAP_STATE/sessions/s10/on"
+rm -f "$CHEAP_STATE/rates.json"
+transcript "$WORK/s10.jsonl" claude-opus-5-5 99000 1000
+usage 20 10 40
+CHEAP_WAIT_DEADLINE=1 hook s10 PostToolBatch >/dev/null
+check "Opus call ignores the Fable window" "$(res s10 '.main.model')" '"claude-opus-5-5"'
+transcript "$WORK/s10.jsonl" claude-fable-5-1 99000 1000
+hook s10 PreToolUse '{"tool_name":"Bash"}' >/dev/null
+out="$(CHEAP_WAIT_DEADLINE=1 hook s10 PostToolBatch)"
+check "Fable call is held by the Fable window" "$(jq -r .continue <<<"$out")" false
+check "hold names the Fable window" "$(grep -c 'scoped:Fable' "$CHEAP_STATE/sessions/s10/waiting")" 1
+
+# --- readings -------------------------------------------------------------
+mkdir -p "$CHEAP_STATE/sessions/s5" && touch "$CHEAP_STATE/sessions/s5/on"
+echo '{"nope":1}' >"$CHEAP_USAGE_FILE"
+rm -f "$CHEAP_STATE/usage.json"
+out="$(CHEAP_WAIT_DEADLINE=1 hook s5 PostToolBatch)"
+check "unknown endpoint shape holds" "$(jq -r .continue <<<"$out")" false
+check "hold names the missing reading" "$(cat "$CHEAP_STATE/sessions/s5/waiting")" "no fresh usage reading"
+
+usage 10 5
+out="$(jq -nc '{session_id: "s5", cost: {total_cost_usd: 1}, model: {id: "claude-opus-5-5"},
+  rate_limits: {five_hour: {used_percentage: 12.5, resets_at: 2000000000},
+                seven_day: {used_percentage: 4, resets_at: 2000000000}}}' | "$GUARD" --statusline)"
+check "statusline segment while holding" "${out%% *}" "cheap"
+check "statusline sample recorded" "$(wc -l <"$CHEAP_STATE/sessions/s5/samples" | tr -d ' ')" 1
+rm -f "$CHEAP_STATE/sessions/s5/waiting"
+out="$(jq -nc '{session_id: "s5"}' | "$GUARD" --statusline)"
+check "statusline segment" "$out" "cheap"
+out="$(jq -nc '{session_id: "plain"}' | "$GUARD" --statusline)"
+check "statusline silent without the mode" "$out" ""
+
+# --- calibration ----------------------------------------------------------
+mkdir -p "$CHEAP_STATE/sessions/s6" && touch "$CHEAP_STATE/sessions/s6/on"
+for row in "0 10" "2 11" "4 13"; do
+  set -- $row
+  printf '{"ts":1,"cost":%s,"five_hour":{"used":%s,"resets":7},"seven_day":{"used":3,"resets":9}}\n' "$1" "$2" \
+    >>"$CHEAP_STATE/sessions/s6/samples"
+done
+rm -f "$CHEAP_STATE/rates.json"
+usage 13 3
+CHEAP_WAIT_DEADLINE=1 hook s6 PostToolBatch >/dev/null
+check "5h rate: (13 - 10 + 1) / 4" "$(jq -c '.five_hour.rate' "$CHEAP_STATE/rates.json")" 1
+check "7d rate: (3 - 3 + 1) / 4" "$(jq -c '.seven_day.rate' "$CHEAP_STATE/rates.json")" 0.25
+
+# --- /clear carries the mode -------------------------------------------------
+mkdir -p "$CHEAP_STATE/sessions/s7" && touch "$CHEAP_STATE/sessions/s7/on"
+hook s7 SessionEnd '{"reason":"clear"}' >/dev/null
+out="$(hook s8 SessionStart '{"source":"clear"}')"
+check "/clear carries the flag" "$(test -e "$CHEAP_STATE/sessions/s8/on" && echo y)" y
+check "/clear re-announces" "$(jq -r '.hookSpecificOutput.hookEventName' <<<"$out")" SessionStart
+out="$(hook s9 SessionStart '{"source":"clear"}')"
+check "carry is consumed once" "$out" ""
+
+out="$(hook s8 SessionStart '{"source":"compact"}')"
+check "compaction re-announces" "$(jq -r '.hookSpecificOutput.additionalContext | startswith("/cheap mode is on")' <<<"$out")" true
+
+printf '%d passed, %d failed\n' "$pass" "$fail"
+[ "$fail" -eq 0 ]

@@ -10,6 +10,8 @@ claude_settings:
   statusLine:
     type: command
     command: bash ~/.claude/statusline.sh
+  # cheap-guard gates hold a call for up to 8 days (past any weekly reset)
+  # and block it if the guard itself fails; its bookkeeping hooks never block.
   hooks:
     SessionStart:
       - hooks:
@@ -17,12 +19,44 @@ claude_settings:
             command: $HOME/.claude/hooks/git-context --session
             timeout: 15
             statusMessage: Checking git state
+      - hooks:
+          - type: command
+            command: $HOME/.claude/hooks/cheap-guard
+            timeout: 30
+    SessionEnd:
+      - hooks:
+          - type: command
+            command: $HOME/.claude/hooks/cheap-guard
+            timeout: 30
+    UserPromptSubmit:
+      - hooks: &cheap-gate
+          - type: command
+            command: $HOME/.claude/hooks/cheap-guard
+            timeout: 691200
+            onFailure: block
+            statusMessage: "cheap: waiting for usage headroom"
+    PostToolBatch:
+      - hooks: *cheap-gate
+    SubagentStart:
+      - hooks: *cheap-gate
+    PreCompact:
+      - hooks: *cheap-gate
     PreToolUse:
       - matcher: Edit|Write|MultiEdit|NotebookEdit|Bash
         hooks:
           - type: command
             command: $HOME/.claude/hooks/git-context --guard
             timeout: 15
+      - hooks: &cheap-bookkeeping
+          - type: command
+            command: $HOME/.claude/hooks/cheap-guard
+            timeout: 30
+    Stop:
+      - hooks: *cheap-bookkeeping
+    StopFailure:
+      - hooks: *cheap-bookkeeping
+    SubagentStop:
+      - hooks: *cheap-bookkeeping
   enabledPlugins:
     frontend-design@claude-plugins-official: true
     superpowers@claude-plugins-official: true

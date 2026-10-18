@@ -1,0 +1,549 @@
+#!/usr/bin/env bash
+# /cheap mode: while a session has it on, hold every model call that session
+# is about to make until the call's worst-case cost fits under CEILING % on
+# every usage window the account reports (5h, weekly, model-scoped weekly).
+# Holding means waiting, through a window reset if need be, never failing.
+#
+# A model call only ever follows one of these events, so each is a gate:
+#   UserPromptSubmit   a new turn, including background-task wakeups
+#   PostToolBatch      the next call of the main loop or of a subagent
+#   SubagentStart      the first call of a new or resumed subagent
+#   PreCompact         the compaction call
+# PreToolUse, Stop, StopFailure, SubagentStop and SessionStart (after a
+# compaction) mark an agent's call done.
+# UserPromptSubmit also takes `/cheap [on|off|status]` without a model call.
+# SessionStart re-announces the mode after compaction and resume, and with
+# SessionEnd carries it across /clear.
+#
+# A gate admits a call when, on every window w,
+#   used_w + rate_w * (in-flight cost + worst case) + OUTSIDE_RESERVE <= CEILING
+# where cost is list-price dollars and rate_w is % of the window per dollar.
+# A call's worst case prices its whole context as an uncached 1h cache write
+# plus MAX_OUTPUT output tokens; once it finishes, its actual cost stands in
+# until a reading has had time to include it.
+#
+# rate_w is calibrated from the (used %, session cost) pairs the statusline
+# sees, rounded up a full point, and persisted machine-wide.
+#
+# Readings come from the statusline (fed by `cheap-guard --statusline`) when
+# this session's last call started moments ago, else from the OAuth usage
+# endpoint, cached machine-wide. No fresh reading means wait.
+#
+# Wired globally from .chezmoidata/claude-settings.yaml; sessions without
+# the mode exit before parsing anything.
+
+set -uo pipefail
+
+CEILING=99                                                 # never-exceed usage %
+OUTSIDE_RESERVE=1                                          # other devices' spend
+SAFETY=1.25                                                # rate model error
+PRIOR_RATE=3                                               # %/$ until calibrated
+MIN_SPAN=1.5                                               # $ to trust a rate
+MAX_OUTPUT=128000                                          # output tokens a call
+FIRST_CALL_CONTEXT=150000                                  # tokens, no transcript
+SL_FRESH=60                                                # statusline reading age
+API_TTL=30                                                 # endpoint reading age
+REFLECT_LAG=60                                             # usage accounting lag
+RESERVATION_TTL=3600                                       # abandoned call expiry
+IN_FLIGHT_POLL=5                                           # recheck while calls run
+MAX_SLEEP=300                                              # longest single wait
+WAIT_DEADLINE="${CHEAP_WAIT_DEADLINE:-684000}"             # under hook timeout
+
+STATE="${CHEAP_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/claude-cheap}"
+CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
+USAGE_URL=https://api.anthropic.com/api/oauth/usage
+
+mode="${1:-}"
+payload="$(cat)"
+
+# String fields by regex, so a session without the mode never starts jq.
+# Escaped quotes inside other values cannot match the leading "key".
+field() {
+  [[ $payload =~ \"$1\"[[:space:]]*:[[:space:]]*\"([^\"]*)\" ]] &&
+    printf '%s' "${BASH_REMATCH[1]}"
+}
+
+sid="$(field session_id)"
+[ -n "$sid" ] || exit 0
+sdir="$STATE/sessions/$sid"
+event="$(field hook_event_name)"
+
+if [ ! -e "$sdir/on" ]; then
+  case "$mode/$event" in
+    /UserPromptSubmit) [[ $(field prompt) =~ ^[[:space:]]*/cheap([[:space:]]|$) ]] || exit 0 ;;
+    /SessionStart) [ "$(field source)" = clear ] || exit 0 ;;
+    *) exit 0 ;;
+  esac
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "cheap-guard: jq is required while /cheap is on" >&2
+  exit 1
+fi
+
+now() { date +%s; }
+
+# mkdir is atomic everywhere (flock is not on macOS). Holders only do short
+# work, so a lock older than ~15s belongs to a dead process.
+lock() {
+  local n=0
+  until mkdir "$1.lock" 2>/dev/null; do
+    if [ $((n += 1)) -gt 300 ]; then
+      rm -rf "$1.lock"
+      n=0
+    fi
+    sleep 0.05
+  done
+}
+unlock() { rmdir "$1.lock" 2>/dev/null; }
+
+write_json() {
+  local tmp="$1.tmp.$$"
+  cat >"$tmp" && mv "$tmp" "$1"
+}
+
+notify() {
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send -a Claude "$1" "$2" 2>/dev/null
+  elif command -v osascript >/dev/null 2>&1; then
+    osascript -e "display notification \"$2\" with title \"$1\"" 2>/dev/null
+  fi
+}
+
+# List price per million tokens: input, output. Anything unrecognised prices
+# as the most expensive tier, so a guess never undercounts.
+price() {
+  case "$1" in
+    *haiku-4*) echo "1 5" ;;
+    *haiku*) echo "0.5 2.5" ;;                             # >100k-token tier
+    *sonnet-4*) echo "3 15" ;;
+    *sonnet*) echo "2 10" ;;
+    *opus-5-5*) echo "4 20" ;;
+    *opus*) echo "5 25" ;;
+    *) echo "10 50" ;;
+  esac
+}
+
+transcript_of() {
+  local main
+  main="$(field transcript_path)"
+  if [ -z "$1" ]; then
+    printf '%s' "$main"
+  elif [ "$(basename "$main")" = "agent-$1.jsonl" ]; then
+    printf '%s' "$main"
+  else
+    printf '%s/%s/subagents/agent-%s.jsonl' "$(dirname "$main")" "$sid" "$1"
+  fi
+}
+
+# The agent's latest model call as TSV: epoch, model, context tokens, tokens
+# appended since, actual cost. Before its first call: only the appended count.
+last_call() {
+  local t="$1" after line
+  [ -f "$t" ] || { echo 0; return; }
+  {
+    read -r after
+    if read -r line; then
+      read -r pin pout <<<"$(price "$(jq -r '.message.model // ""' <<<"$line")")"
+      jq -r --argjson after "$after" --argjson pin "$pin" --argjson pout "$pout" '
+        .message.usage as $u
+        | [ (.timestamp | sub("\\.[0-9]+"; "") | fromdateiso8601),
+            .message.model,
+            (($u.input_tokens // 0) + ($u.cache_creation_input_tokens // 0)
+              + ($u.cache_read_input_tokens // 0) + ($u.output_tokens // 0)),
+            ($after / 3 | floor),
+            ((($u.input_tokens // 0) + 2 * ($u.cache_creation_input_tokens // 0)
+              + 0.1 * ($u.cache_read_input_tokens // 0)) * $pin
+              + ($u.output_tokens // 0) * $pout) / 1e6 ]
+        | @tsv' <<<"$line"
+    else
+      echo $((after / 3))
+    fi
+  } < <({ tac "$t" 2>/dev/null || tail -r "$t"; } | awk '
+    index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") { print after + 0; print; found = 1; exit }
+    { after += length($0) + 1 }
+    END { if (!found) print after + 0 }')
+}
+
+worst_case() {
+  local info ts model ctx added fallback pin pout
+  info="$(last_call "$(transcript_of "$1")")"
+  if [[ $info == *$'\t'* ]]; then
+    IFS=$'\t' read -r ts model ctx added _ <<<"$info"
+  else
+    model=''
+    [ -z "$1" ] && model="$(jq -r '.model // ""' "$sdir/statusline.json" 2>/dev/null)"
+    ctx=$FIRST_CALL_CONTEXT
+    added="$info"
+  fi
+  read -r pin pout <<<"$(price "$model")"
+  awk -v c="$ctx" -v a="$added" -v i="$pin" -v o="$pout" -v m="$MAX_OUTPUT" -v id="$model" \
+    'BEGIN { printf "%.4f %s", ((c + a) * 2 * i + m * o) / 1e6, id }'
+}
+
+oauth_token() {
+  local creds
+  creds="$(cat "$CLAUDE_DIR/.credentials.json" 2>/dev/null ||
+    security find-generic-password -s 'Claude Code-credentials' -w 2>/dev/null)" || return 1
+  jq -er --argjson now "$(now)" \
+    '.claudeAiOauth | select((.expiresAt // 0) / 1000 > $now + 30) | .accessToken' <<<"$creds"
+}
+
+# One endpoint call per API_TTL machine-wide. A 429 backs off for its
+# retry-after, doubling from a minute on repeats; Claude Code owns token
+# refresh, so an expired token just means no reading.
+fetch_usage() {
+  local body="$STATE/usage.body.$$" head="$STATE/usage.head.$$" code token strikes retry delay
+  [ "$(cat "$STATE/usage.backoff" 2>/dev/null || echo 0)" -gt "$(now)" ] && return 1
+  if [ -n "${CHEAP_USAGE_FILE:-}" ]; then
+    cp "$CHEAP_USAGE_FILE" "$body"
+    code=200
+  else
+    token="$(oauth_token)" || return 1
+    code="$(curl -sS -m 10 -o "$body" -D "$head" -w '%{http_code}' \
+      -H "Authorization: Bearer $token" -H 'anthropic-beta: oauth-2025-04-20' \
+      "$USAGE_URL" 2>/dev/null)"
+  fi
+  case "$code" in
+    200)
+      if jq -e '(.limits | type) == "array" or (.five_hour | type) == "object"' "$body" >/dev/null 2>&1; then
+        jq -c --argjson ts "$(now)" '{ts: $ts, body: .}' "$body" | write_json "$STATE/usage.json"
+        rm -f "$STATE/usage.backoff" "$STATE/usage.strikes"
+      fi
+      ;;
+    429)
+      strikes=$(($(cat "$STATE/usage.strikes" 2>/dev/null || echo 0) + 1))
+      echo "$strikes" >"$STATE/usage.strikes"
+      retry="$(grep -i '^retry-after:' "$head" 2>/dev/null | tr -dc 0-9)"
+      delay=$((60 << (strikes > 4 ? 4 : strikes - 1)))
+      [ "${retry:-0}" -gt "$delay" ] && delay="$retry"
+      [ "$delay" -gt 900 ] && delay=900
+      echo $(($(now) + delay)) >"$STATE/usage.backoff"
+      ;;
+    *) echo $(($(now) + 60)) >"$STATE/usage.backoff" ;;
+  esac
+  rm -f "$body" "$head"
+}
+
+api_cache() {
+  local ts
+  ts="$(jq -r '.ts' "$STATE/usage.json" 2>/dev/null || echo 0)"
+  if [ $(($(now) - ts)) -gt "$API_TTL" ]; then
+    lock "$STATE/usage"
+    ts="$(jq -r '.ts' "$STATE/usage.json" 2>/dev/null || echo 0)"
+    [ $(($(now) - ts)) -gt "$API_TTL" ] && fetch_usage
+    unlock "$STATE/usage"
+  fi
+  cat "$STATE/usage.json" 2>/dev/null || echo null
+}
+
+# The statusline's percentages come from the headers of this session's
+# latest response. They count as a reading taken when the last main call
+# started, and only once a response has landed since then.
+sl_reading() {
+  local start
+  start="$(cat "$sdir/main_start" 2>/dev/null || echo 0)"
+  jq -c --argjson start "$start" --argjson now "$(now)" --argjson fresh "$SL_FRESH" '
+    select(.data_ts >= $start and $now - $start <= $fresh and .five_hour.used != null)
+    | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . || echo null
+}
+
+compute_rates() {
+  local rates
+  lock "$STATE/rates"
+  rates="$(jq -n --slurpfile s <(cat "$sdir/samples" 2>/dev/null) \
+    --argjson stored "$(cat "$STATE/rates.json" 2>/dev/null || echo '{}')" \
+    --argjson now "$(now)" --argjson min "$MIN_SPAN" '
+    def est($w):
+      ($s | map(select(.[$w].used != null))) as $x
+      | if ($x | length) < 2 then null else
+          $x[-1] as $l
+          | ($x | map(select(.[$w].resets == $l[$w].resets)) | .[0]) as $f
+          | ($l.cost - $f.cost) as $span
+          | if $span >= $min
+            then {rate: (($l[$w].used - $f[$w].used + 1) / $span), span: $span, ts: $now}
+            else null end
+        end;
+    def pick($w):
+      est($w) as $e | $stored[$w] as $o
+      | if $e != null and ($o == null or $e.span >= $o.span or $now - $o.ts > 604800)
+        then $e else $o end;
+    {five_hour: pick("five_hour"), seven_day: pick("seven_day")} | with_entries(select(.value != null))')"
+  printf '%s\n' "$rates" | write_json "$STATE/rates.json"
+  unlock "$STATE/rates"
+  printf '%s' "$rates"
+}
+
+# Folds the readings, rates and reservations into a verdict:
+#   {ok, wait, drop: [reservation keys], summary}
+evaluate() {
+  local key="$1" worst="$2" model="$3"
+  jq -nc --arg model "$model" \
+    --argjson sl "$(sl_reading)" --argjson api "$(api_cache)" \
+    --argjson rates "$(compute_rates)" \
+    --argjson res "$(cat "$sdir/reservations.json" 2>/dev/null || echo '{}')" \
+    --arg key "$key" --argjson worst "$worst" --argjson now "$(now)" \
+    --argjson backoff "$(cat "$STATE/usage.backoff" 2>/dev/null || echo 0)" \
+    --argjson ceiling "$CEILING" --argjson outside "$OUTSIDE_RESERVE" \
+    --argjson safety "$SAFETY" --argjson prior "$PRIOR_RATE" \
+    --argjson api_ttl "$API_TTL" --argjson lag "$REFLECT_LAG" \
+    --argjson ttl "$RESERVATION_TTL" --argjson poll "$IN_FLIGHT_POLL" \
+    --argjson max_sleep "$MAX_SLEEP" '
+    def iso: if . == null then null
+      else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch null) end;
+    def clamp: if . < 5 then 5 elif . > $max_sleep then $max_sleep else . end;
+    def windows_of($b):
+      if ($b.limits | type) == "array" then
+        [ $b.limits | to_entries[] | .key as $i | .value
+          | { name: (if .kind == "session" then "five_hour"
+                     elif .kind == "weekly_all" then "seven_day"
+                     else "scoped:\(.scope.model.display_name // .kind)" end),
+              used: (.percent // 100), resets: (.resets_at | iso),
+              share: ([$b.weekly_scoped_shares // [] | .[] | select(.limit_index == $i)]
+                      | .[0].allowance_percent_of_weekly) } ]
+      else
+        [ ("five_hour", "seven_day") as $n | select($b[$n] | type == "object")
+          | {name: $n, used: ($b[$n].utilization // 100), resets: ($b[$n].resets_at | iso)} ]
+      end;
+    def from_sl($n): $sl[$n] // {} | {used, resets};
+
+    (($rates.five_hour.rate // $prior) * $safety) as $r5
+    | ([($rates.seven_day.rate // $r5 / $safety) * $safety, $r5] | min) as $r7
+    | def rate: if .name == "five_hour" then $r5
+        elif .name == "seven_day" then $r7
+        else $r7 * 100 / (.share // 50) end;
+
+    ($api != null and $now - $api.ts <= $api_ttl) as $api_fresh
+    | (if $api_fresh then
+         { ts: ([$api.ts, ($sl.ts // empty)] | min),
+           windows: [ windows_of($api.body)[]
+             | if (.name == "five_hour" or .name == "seven_day") and $sl != null
+               then .used = ([.used, (from_sl(.name).used // 0)] | max) else . end ] }
+       elif $sl != null and $api != null then
+         # Scoped windows draw on the weekly allowance, so they can have
+         # grown at most by the weekly growth scaled to their share.
+         (windows_of($api.body) | map({key: .name, value: .}) | from_entries) as $old
+         | { ts: $sl.ts,
+             windows: ([ ("five_hour", "seven_day") as $n | from_sl($n) + {name: $n} ]
+               + [ $old[] | select(.name | startswith("scoped:"))
+                   | .used = (if (.resets // 0) > $now then .used else 0 end)
+                       + ([0, (from_sl("seven_day").used // 100) - ($old.seven_day.used // 0)] | max)
+                         * 100 / (.share // 50) + 1 ]) }
+       else null end) as $reading
+
+    | ($res | to_entries | map(.value + {key: .key})) as $r
+    | [ $r[] | select(.key == $key
+          or (.end == null and $now - .start > $ttl)
+          or ($reading != null and .end != null and $reading.ts >= .end + $lag)) | .key ] as $drop
+    | [ $r[] | select(.key | IN($drop[]) | not) ] as $kept
+
+    # A model-scoped window only meters calls that can run on that model;
+    # a call whose model is still unknown might.
+    | def meters($m): . as $w | ($w.name | startswith("scoped:") | not) or $m == ""
+        or ($m | ascii_downcase | contains($w.name | ltrimstr("scoped:") | ascii_downcase));
+
+    if $reading == null then
+        { ok: false, drop: $drop,
+          wait: ([$backoff - $now, $poll] | max | clamp),
+          summary: "no fresh usage reading" }
+      else
+        [ $reading.windows[] | select(.used != null)
+          | . as $w
+          | ([ $kept[] | select(.model // "" | . as $m | $w | meters($m)) | .cost ] | add // 0) as $committed
+          | (if meters($model) then $worst else 0 end) as $own
+          | . + { rate: rate }
+          | . + { alone: (.used + .rate * $own + $outside),
+                  need: (.used + .rate * ($committed + $own) + $outside),
+                  extra: (.rate * ($committed + $own)) } ] as $ws
+        | ([ $ws[] | select(.alone > $ceiling) ]) as $blocked
+        | { ok: (($ws | length) > 0 and all($ws[]; .need <= $ceiling)),
+            drop: $drop,
+            wait: (if ($blocked | length) > 0
+                   then ([ $blocked[] | .resets // ($now + $max_sleep) ] | max) - $now + 5 | clamp
+                   else $poll end),
+            summary: ([ $ws[] | "\(.name | sub("five_hour"; "5h") | sub("seven_day"; "7d")) \(.used)% (+\(.extra * 10 | round / 10))"
+                        + (if .resets then " → \(.resets | strflocaltime("%a %H:%M"))" else "" end) ]
+                      | join(" · ")) }
+      end'
+}
+
+# Marks the agent's open reservation done, swapping its worst case for the
+# call's actual cost once the transcript shows that call.
+release() {
+  local key="$1" agent="$2" start info ts cost
+  [ -f "$sdir/reservations.json" ] || return 0
+  lock "$sdir/res"
+  start="$(jq -r --arg k "$key" '.[$k] | select(. != null and .end == null) | .start' "$sdir/reservations.json")"
+  if [ -n "$start" ]; then
+    info="$(last_call "$(transcript_of "$agent")")"
+    cost=null
+    if [[ $info == *$'\t'* ]]; then
+      IFS=$'\t' read -r ts _ _ _ cost <<<"$info"
+      [ "${ts%.*}" -ge "$start" ] || cost=null
+    fi
+    jq -c --arg k "$key" --argjson now "$(now)" --argjson cost "$cost" \
+      '.[$k] += {end: $now} | if $cost != null then .[$k].cost = $cost else . end' \
+      "$sdir/reservations.json" | write_json "$sdir/reservations.json"
+  fi
+  unlock "$sdir/res"
+}
+
+emit_stop() {
+  jq -nc --arg r "$1" '{continue: false, stopReason: $r}'
+}
+
+gate() {
+  local key="$1" agent="$2" worst model verdict started left pause waited=0
+  read -r worst model <<<"$(worst_case "$agent")"
+  started="$(now)"
+  while [ -e "$sdir/on" ]; do
+    api_cache >/dev/null
+    lock "$sdir/res"
+    verdict="$(evaluate "$key" "$worst" "$model")"
+    if [ -z "$verdict" ]; then
+      unlock "$sdir/res"
+      echo "cheap-guard: could not evaluate headroom" >&2
+      exit 1
+    fi
+    jq -c --argjson v "$verdict" --arg k "$key" --argjson now "$(now)" \
+      --argjson worst "$worst" --arg model "$model" '
+      with_entries(select(.key | IN($v.drop[]) | not))
+      | if $v.ok then .[$k] = {start: $now, cost: $worst, model: $model} else . end' \
+      <(cat "$sdir/reservations.json" 2>/dev/null || echo '{}') | write_json "$sdir/reservations.json"
+    if [ "$(jq -r .ok <<<"$verdict")" = true ]; then
+      [ "$key" = main ] && now >"$sdir/main_start"
+      unlock "$sdir/res"
+      if [ "$waited" -gt 0 ]; then
+        rm -f "$sdir/waiting"
+        notify "Claude /cheap resumed" "$(jq -r .summary <<<"$verdict")"
+      fi
+      return 0
+    fi
+    unlock "$sdir/res"
+    [ -e "$sdir/waiting" ] || notify "Claude /cheap is holding" "$(jq -r .summary <<<"$verdict")"
+    jq -r .summary <<<"$verdict" >"$sdir/waiting"
+    left=$((started + WAIT_DEADLINE - $(now)))
+    if [ "$left" -le 0 ]; then
+      [ "$event" = SubagentStart ] && exit 0
+      emit_stop "cheap: no usage headroom after waiting $((WAIT_DEADLINE / 3600))h — $(jq -r .summary <<<"$verdict")"
+      exit 0
+    fi
+    pause="$(jq -r .wait <<<"$verdict")"
+    sleep "$((pause < left ? pause : left))"
+    waited=1
+  done
+}
+
+enable() {
+  mkdir -p "$sdir"
+  touch "$sdir/on"
+  find "$STATE/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} + 2>/dev/null
+}
+
+block_prompt() {
+  jq -nc --arg r "$1" '{decision: "block", reason: $r}'
+  exit 0
+}
+
+status_text() {
+  local verdict worst model
+  read -r worst model <<<"$(worst_case "")"
+  api_cache >/dev/null
+  lock "$sdir/res"
+  verdict="$(evaluate main "$worst" "$model")"
+  unlock "$sdir/res"
+  printf 'cheap: on · %s · next call %s' "$(jq -r .summary <<<"$verdict")" \
+    "$([ "$(jq -r .ok <<<"$verdict")" = true ] && echo fits || echo waits)"
+}
+
+# Pid of the Claude Code process, so SessionEnd and SessionStart of one
+# /clear agree on an identity although each hook runs in its own shell.
+claude_pid() {
+  local p=$PPID comm
+  for _ in 1 2 3 4 5; do
+    comm="$(ps -o comm= -p "$p" 2>/dev/null)"
+    [[ $comm == claude* ]] && { echo "$p"; return; }
+    p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
+    [ -n "$p" ] || break
+  done
+  echo "$PPID"
+}
+
+announce() {
+  jq -nc --arg ctx "/cheap mode is on for this session: hooks hold each model call until its worst-case cost fits under ${CEILING}% of every usage window, waiting through resets when needed. The user can run \`/cheap off\` or \`/cheap status\`." \
+    '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
+}
+
+statusline() {
+  local new old
+  mkdir -p "$sdir"
+  old="$(cat "$sdir/statusline.json" 2>/dev/null || echo null)"
+  new="$(jq -c --argjson old "$old" --argjson now "$(now)" '
+    { cost: (.cost.total_cost_usd // 0), model: (.model.id // null),
+      five_hour: {used: .rate_limits.five_hour.used_percentage, resets: .rate_limits.five_hour.resets_at},
+      seven_day: {used: .rate_limits.seven_day.used_percentage, resets: .rate_limits.seven_day.resets_at} }
+    | .fresh = ($old == null or $old.cost != .cost or $old.five_hour != .five_hour)
+    | .data_ts = (if .fresh then $now else $old.data_ts end)' <<<"$payload")"
+  printf '%s\n' "$new" | write_json "$sdir/statusline.json"
+  jq -c 'select(.fresh and .five_hour.used != null) | {ts: .data_ts, cost, five_hour, seven_day}' \
+    <<<"$new" >>"$sdir/samples"
+  if [ -e "$sdir/waiting" ]; then
+    printf 'cheap ⏸ %s' "$(cut -c1-60 "$sdir/waiting")"
+  else
+    printf 'cheap'
+  fi
+}
+
+if [ "$mode" = --statusline ]; then
+  statusline
+  exit 0
+fi
+
+agent="$(field agent_id)"
+key="${agent:-main}"
+
+case "$event" in
+  UserPromptSubmit)
+    prompt="$(jq -r '.prompt // ""' <<<"$payload")"
+    if [[ $prompt =~ ^[[:space:]]*/cheap([[:space:]]+(.*))?$ ]]; then
+      arg="$(printf '%s' "${BASH_REMATCH[2]:-}" | sed 's/[[:space:]]*$//')"
+      case "$arg" in
+        '' | on) enable; block_prompt "$(status_text)" ;;
+        off) rm -rf "$sdir"; block_prompt "cheap: off" ;;
+        status)
+          [ -e "$sdir/on" ] || block_prompt "cheap: off"
+          block_prompt "$(status_text)"
+          ;;
+        *) enable ;;
+      esac
+    fi
+    gate main ''
+    ;;
+  PostToolBatch) gate "$key" "$agent" ;;
+  SubagentStart) gate "$key" "$agent" ;;
+  PreCompact) gate main '' ;;
+  PreToolUse | Stop | StopFailure | SubagentStop) release "$key" "$agent" ;;
+  SessionStart)
+    case "$(field source)" in
+      clear)
+        if [ -e "$STATE/carry/$(claude_pid)" ]; then
+          rm -f "$STATE/carry/$(claude_pid)"
+          enable
+          announce
+        fi
+        ;;
+      compact)
+        release main ''
+        announce
+        ;;
+      *) announce ;;
+    esac
+    ;;
+  SessionEnd)
+    if [ "$(field reason)" = clear ]; then
+      mkdir -p "$STATE/carry"
+      touch "$STATE/carry/$(claude_pid)"
+    fi
+    ;;
+esac
+exit 0
