@@ -156,6 +156,11 @@ jq -nc --rawfile d "$WORK/image.b64" '{type: "user", message: {content: [{type: 
   content: [{type: "image", source: {type: "base64", data: $d}}]}]}}' >>"$WORK/s12.jsonl"
 CHEAP_WAIT_DEADLINE=1 hook s12 PostToolBatch >/dev/null
 check "an image costs a fixed allowance" "$(res s12 '.main.cost * 100 | round')" 342
+jq -nc --rawfile d "$WORK/image.b64" '{type: "user", message: {content: [{type: "tool_result", content: "ok"}]},
+  toolUseResult: {type: "image", file: {base64: $d}}}' >>"$WORK/s12.jsonl"
+jq -nc --rawfile d "$WORK/image.b64" '{type: "api-request-blob", blob: $d}' >>"$WORK/s12.jsonl"
+CHEAP_WAIT_DEADLINE=1 hook s12 PostToolBatch >/dev/null
+check "local copies and bookkeeping are not context" "$(res s12 '.main.cost * 100 | round')" 342
 
 # 900k context plus ~200k tokens of new text caps at 1M input:
 # (1e6 * 2 * $10 + 128000 * $50) / 1e6 = $26.40.

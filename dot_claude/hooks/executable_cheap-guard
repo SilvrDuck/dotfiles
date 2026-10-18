@@ -177,42 +177,49 @@ transcript_of() {
 # The agent's latest model call as TSV: epoch, model, context tokens, tokens
 # appended since, actual cost. Before its first call: only the appended count.
 # Synthetic entries (interruptions, errors) carry no usage and are skipped.
-# Text counts at 3 characters a token; an embedded image costs IMAGE_TOKENS
-# whatever the length of its base64.
+# Appended tokens count what reaches the model: message content (text at 3
+# characters a token, an image at IMAGE_TOKENS), attachments, and any entry
+# type not known to stay local. Claude Code's own bookkeeping, including the
+# local copy of each tool result, is left out.
 last_call() {
-  local t="$1" after line
+  local t="$1" info ts model i cw cr o added pin pout
   [ -f "$t" ] || { echo 0; return; }
-  {
-    read -r after
-    if read -r line; then
-      read -r pin pout <<<"$(price "$(jq -r '.message.model // ""' <<<"$line")")"
-      jq -r --argjson after "$after" --argjson pin "$pin" --argjson pout "$pout" '
-        .message.usage as $u
-        | [ (.timestamp | sub("\\.[0-9]+"; "") | fromdateiso8601),
-            .message.model,
-            (($u.input_tokens // 0) + ($u.cache_creation_input_tokens // 0)
-              + ($u.cache_read_input_tokens // 0) + ($u.output_tokens // 0)),
-            ($after / 3 | floor),
-            ((($u.input_tokens // 0) + 2 * ($u.cache_creation_input_tokens // 0)
-              + 0.1 * ($u.cache_read_input_tokens // 0)) * $pin
-              + ($u.output_tokens // 0) * $pout) / 1e6 ]
-        | @tsv' <<<"$line"
-    else
-      echo $((after / 3))
-    fi
-  } < <(reverse "$t" | awk -v image=$((IMAGE_TOKENS * 3)) '
-    index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") &&
-      !index($0, "\"model\":\"<synthetic>\"") { print after + 0; print; found = 1; exit }
-    {
-      len = length($0) + 1
-      rest = $0
-      while (match(rest, /"type":"image","source":\{"type":"base64","data":"[A-Za-z0-9+\/=]+"/)) {
-        len += image - RLENGTH
-        rest = substr(rest, RSTART + RLENGTH)
-      }
-      after += len
-    }
-    END { if (!found) print after + 0 }')
+  info="$(reverse "$t" | awk '
+      index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") &&
+        !index($0, "\"model\":\"<synthetic>\"") { print "CALL\t" $0; exit }
+      { print }' |
+    jq -nRr --argjson image "$IMAGE_TOKENS" '
+      def tokens:
+        if type == "string" then length / 3
+        elif type == "array" then map(tokens) | add // 0
+        elif type == "object" then
+          if .type == "image" then $image
+          elif .type == "text" then .text // "" | tokens
+          elif .type == "tool_result" then .content | tokens
+          else tojson | tokens end
+        else 0 end;
+      def appended:
+        if .type == "user" or .type == "assistant" then .message.content | tokens
+        elif .type | IN("api-request", "api-request-blob", "api-request-shape", "mode",
+            "last-prompt", "atis-latch", "ai-title", "file-history-delta",
+            "file-history-snapshot", "permission-mode", "queue-operation", "cost-state") then 0
+        else tojson | tokens end;
+      reduce inputs as $l ({added: 0};
+        if $l | startswith("CALL\t") then .call = ($l[5:] | fromjson)
+        else .added += ($l | (fromjson? | appended) // length / 3) end)
+      | (.added | ceil) as $added
+      | if .call == null then "\($added)"
+        else .call | .message.usage as $u
+          | [ (.timestamp | sub("\\.[0-9]+"; "") | fromdateiso8601), .message.model,
+              ($u.input_tokens // 0), ($u.cache_creation_input_tokens // 0),
+              ($u.cache_read_input_tokens // 0), ($u.output_tokens // 0), $added ]
+          | @tsv end')"
+  [[ $info == *$'\t'* ]] || { echo "${info:-0}"; return; }
+  IFS=$'\t' read -r ts model i cw cr o added <<<"$info"
+  read -r pin pout <<<"$(price "$model")"
+  awk -v ts="$ts" -v m="$model" -v i="$i" -v cw="$cw" -v cr="$cr" -v o="$o" -v a="$added" \
+    -v pin="$pin" -v pout="$pout" 'BEGIN { printf "%s\t%s\t%d\t%d\t%.6f\n", ts, m,
+      i + cw + cr + o, a, ((i + 2 * cw + 0.1 * cr) * pin + o * pout) / 1e6 }'
 }
 
 # A request's input can never exceed MAX_CONTEXT, whatever the estimate.
