@@ -41,9 +41,11 @@ usage() {
   rm -f "$CHEAP_STATE/usage.json" "$CHEAP_STATE/usage.backoff"
 }
 
-# One assistant entry: model, total context tokens (as cache reads), output.
+# One assistant entry: model, total context tokens (as cache reads), output,
+# and how long ago it was written (default 10 minutes: a cold cache).
 transcript() {
-  jq -nc --arg m "$2" --argjson ctx "$3" --argjson out "$4" --arg ts "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" \
+  jq -nc --arg m "$2" --argjson ctx "$3" --argjson out "$4" \
+    --arg ts "$(jq -nr --argjson age "${5:-600}" 'now - $age | strftime("%Y-%m-%dT%H:%M:%S.000Z")')" \
     '{type: "assistant", timestamp: $ts, message: {model: $m,
       usage: {input_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: $ctx, output_tokens: $out}}}' >"$1"
 }
@@ -93,11 +95,12 @@ out="$(CHEAP_WAIT_DEADLINE=1 hook s3 PostToolBatch)"
 check "admits at 80%" "$out|$?" "|0"
 check "reserves the worst case" "$(res s3 '.main.cost * 100 | round')" 336
 
-transcript "$WORK/s3.jsonl" claude-opus-5-5 99000 1000
+transcript "$WORK/s3.jsonl" claude-opus-5-5 99000 1000 0
 hook s3 PreToolUse '{"tool_name":"Bash"}' >/dev/null
 check "PreToolUse ends the call" "$(res s3 '.main.end != null')" true
 check "actual cost replaces worst case" "$(res s3 '.main.cost * 10000 | round')" 596
 
+transcript "$WORK/s3.jsonl" claude-opus-5-5 99000 1000
 usage 86 10
 start=$(date +%s)
 out="$(CHEAP_WAIT_DEADLINE=1 hook s3 PostToolBatch)"
@@ -173,6 +176,15 @@ jq -nc --argjson now "$(date +%s)" '{five_hour: {rate: 0.5, span: 100, ts: $now}
   weekly_ratio: {q: 0.2, span: 100, ts: $now}}' >"$CHEAP_STATE/rates.json"
 CHEAP_WAIT_DEADLINE=1 hook s13 PostToolBatch >/dev/null
 check "input is capped at the context window" "$(res s13 '.main.cost * 100 | round')" 2640
+
+# Right after the previous call, the re-sent 99k prompt is a cache read and
+# only its 1k reply is new: (99000 * 0.1 * $4 + 1000 * 2 * $4 + 128000 * $20)
+# / 1e6 = $2.6076.
+mkdir -p "$CHEAP_STATE/sessions/s14" && touch "$CHEAP_STATE/sessions/s14/on"
+transcript "$WORK/s14.jsonl" claude-opus-5-5 99000 1000 30
+usage 20 10
+CHEAP_WAIT_DEADLINE=1 hook s14 PostToolBatch >/dev/null
+check "a warm cache prices the prompt as a read" "$(res s14 '.main.cost * 10000 | round')" 26076
 
 # --- readings -------------------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s5" && touch "$CHEAP_STATE/sessions/s5/on"

@@ -18,8 +18,10 @@
 # A gate admits a call when, on every window w,
 #   used_w + rate_w * (in-flight cost + worst case) + OUTSIDE_RESERVE <= CEILING
 # where cost is list-price dollars and rate_w is % of the window per dollar.
-# A call's worst case prices its whole context as an uncached 1h cache write
-# plus MAX_OUTPUT output tokens; once it finishes, its actual cost stands in
+# A call's worst case prices its context as an uncached 1h cache write (or,
+# right after the agent's previous call, the re-sent prompt as a cache read;
+# an evicted cache can then overshoot by that one call) plus MAX_OUTPUT
+# output tokens; once it finishes, its actual cost stands in
 # until a reading has had time to include it.
 #
 # rate_w is calibrated from a machine-wide window history that every
@@ -45,6 +47,7 @@ MAX_OUTPUT=128000                                          # output tokens a cal
 FIRST_CALL_CONTEXT=150000                                  # tokens, no transcript
 MAX_CONTEXT=1000000                                        # largest context window
 IMAGE_TOKENS=8000                                          # above any image's cost
+CACHE_WARM=240                                             # under the 5m cache TTL
 SL_FRESH=60                                                # statusline reading age
 API_TTL=30                                                 # endpoint reading age
 REFLECT_LAG=60                                             # usage accounting lag
@@ -102,9 +105,11 @@ lock() {
 }
 unlock() { rmdir "$1.lock" 2>/dev/null; }
 
+# Empty input means the producing jq failed; the old file then stays.
 write_json() {
   local tmp="$1.tmp.$$"
-  cat >"$tmp" && mv "$tmp" "$1"
+  cat >"$tmp"
+  if [ -s "$tmp" ]; then mv "$tmp" "$1"; else rm -f "$tmp"; fi
 }
 
 # Reset times arrive as ISO strings (endpoint) or epochs (statusline), with
@@ -218,16 +223,20 @@ last_call() {
   IFS=$'\t' read -r ts model i cw cr o added <<<"$info"
   read -r pin pout <<<"$(price "$model")"
   awk -v ts="$ts" -v m="$model" -v i="$i" -v cw="$cw" -v cr="$cr" -v o="$o" -v a="$added" \
-    -v pin="$pin" -v pout="$pout" 'BEGIN { printf "%s\t%s\t%d\t%d\t%.6f\n", ts, m,
-      i + cw + cr + o, a, ((i + 2 * cw + 0.1 * cr) * pin + o * pout) / 1e6 }'
+    -v pin="$pin" -v pout="$pout" 'BEGIN { printf "%s\t%s\t%d\t%d\t%.6f\t%d\n", ts, m,
+      i + cw + cr + o, a, ((i + 2 * cw + 0.1 * cr) * pin + o * pout) / 1e6, i + cw + cr }'
 }
 
-# A request's input can never exceed MAX_CONTEXT, whatever the estimate.
+# The next call re-sends the last call's prompt and appends that call's
+# reply plus everything since. Within CACHE_WARM of the last call, the
+# prompt is priced as a cache read; otherwise all of it as a fresh 1h cache
+# write. Input can never exceed MAX_CONTEXT, whatever the estimate.
 worst_case() {
-  local info ts model ctx added pin pout
+  local info ts model ctx added prefix=0 pin pout
   info="$(last_call "$(transcript_of "$1")")"
   if [[ $info == *$'\t'* ]]; then
-    IFS=$'\t' read -r ts model ctx added _ <<<"$info"
+    IFS=$'\t' read -r ts model ctx added _ prefix <<<"$info"
+    [ $(($(now) - ${ts%.*})) -le "$CACHE_WARM" ] || prefix=0
   else
     model=''
     [ -z "$1" ] && model="$(jq -r '.model // ""' "$sdir/statusline.json" 2>/dev/null)"
@@ -235,8 +244,10 @@ worst_case() {
     added="$info"
   fi
   read -r pin pout <<<"$(price "$model")"
-  awk -v c="$ctx" -v a="$added" -v cap="$MAX_CONTEXT" -v i="$pin" -v o="$pout" -v m="$MAX_OUTPUT" \
-    -v id="$model" 'BEGIN { n = c + a; if (n > cap) n = cap; printf "%.4f %s", (n * 2 * i + m * o) / 1e6, id }'
+  awk -v c="$ctx" -v a="$added" -v p="$prefix" -v cap="$MAX_CONTEXT" -v i="$pin" -v o="$pout" \
+    -v m="$MAX_OUTPUT" -v id="$model" 'BEGIN {
+      n = c + a; if (n > cap) n = cap; if (p > n) p = n
+      printf "%.4f %s", ((p * 0.1 + (n - p) * 2) * i + m * o) / 1e6, id }'
 }
 
 oauth_token() {
@@ -458,7 +469,7 @@ release() {
     info="$(last_call "$(transcript_of "$agent")")"
     cost=null
     if [[ $info == *$'\t'* ]]; then
-      IFS=$'\t' read -r ts _ _ _ cost <<<"$info"
+      IFS=$'\t' read -r ts _ _ _ cost _ <<<"$info"
       [ "${ts%.*}" -ge "$start" ] || cost=null
     fi
     jq -c --arg k "$key" --argjson now "$(now)" --argjson cost "$cost" \
@@ -474,9 +485,10 @@ emit_stop() {
 
 gate() {
   local key="$1" agent="$2" worst model verdict started left pause waited=0
-  read -r worst model <<<"$(worst_case "$agent")"
   started="$(now)"
   while [ -e "$sdir/on" ]; do
+    # Re-priced on every pass: a cache that was warm goes cold while waiting.
+    read -r worst model <<<"$(worst_case "$agent")"
     api_cache >/dev/null
     lock "$sdir/res"
     verdict="$(evaluate "$key" "$worst" "$model")"
