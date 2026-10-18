@@ -22,8 +22,10 @@
 # plus MAX_OUTPUT output tokens; once it finishes, its actual cost stands in
 # until a reading has had time to include it.
 #
-# rate_w is calibrated from the (used %, session cost) pairs the statusline
-# sees, rounded up a full point, and persisted machine-wide.
+# rate_w is calibrated from a machine-wide window history that every
+# session's statusline (used %, session cost) and every endpoint reading
+# feed, rounded up a full point, and persisted. The weekly rate is also
+# bounded by the 5h rate times the observed weekly/5h growth ratio.
 #
 # Readings come from the statusline (fed by `cheap-guard --statusline`) when
 # this session's last call started moments ago, else from the OAuth usage
@@ -70,6 +72,7 @@ event="$(field hook_event_name)"
 
 if [ ! -e "$sdir/on" ]; then
   case "$mode/$event" in
+    --statusline/*) ;;
     /UserPromptSubmit) [[ $(field prompt) =~ ^[[:space:]]*/cheap([[:space:]]|$) ]] || exit 0 ;;
     /SessionStart) [ "$(field source)" = clear ] || exit 0 ;;
     *) exit 0 ;;
@@ -102,6 +105,33 @@ write_json() {
   cat >"$tmp" && mv "$tmp" "$1"
 }
 
+# Reset times arrive as ISO strings (endpoint) or epochs (statusline), with
+# sub-second jitter; both are compared at minute precision.
+JQ_TIME='
+  def iso: if . == null then null
+    else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch null) end;
+  def minute: if . == null then null else (. + 30) / 60 | floor * 60 end;'
+
+# Appends a {ts, p5, r5, p7, r7} snapshot of the 5h and weekly windows to the
+# machine-wide history when it differs from the last one.
+record_history() {
+  local snap last
+  snap="$(cat)"
+  [ -n "$snap" ] || return 0
+  mkdir -p "$STATE"
+  lock "$STATE/history"
+  last="$(tail -n 1 "$STATE/history" 2>/dev/null)"
+  if [ -z "$last" ] || ! jq -e --argjson a "$snap" --argjson b "$last" -n \
+    '$a | del(.ts) == ($b | del(.ts))' >/dev/null 2>&1; then
+    printf '%s\n' "$snap" >>"$STATE/history"
+    if [ "$(wc -l <"$STATE/history")" -gt 5000 ]; then
+      jq -c --argjson cut $(($(now) - 691200)) 'select(.ts >= $cut)' "$STATE/history" |
+        write_json "$STATE/history"
+    fi
+  fi
+  unlock "$STATE/history"
+}
+
 notify() {
   if command -v notify-send >/dev/null 2>&1; then
     notify-send -a Claude "$1" "$2" 2>/dev/null
@@ -123,6 +153,12 @@ price() {
     *) echo "10 50" ;;
   esac
 }
+
+if command -v tac >/dev/null 2>&1; then
+  reverse() { tac "$1"; }
+else
+  reverse() { tail -r "$1"; }
+fi
 
 transcript_of() {
   local main
@@ -159,7 +195,7 @@ last_call() {
     else
       echo $((after / 3))
     fi
-  } < <({ tac "$t" 2>/dev/null || tail -r "$t"; } | awk '
+  } < <(reverse "$t" | awk '
     index($0, "\"type\":\"assistant\"") && index($0, "\"usage\"") { print after + 0; print; found = 1; exit }
     { after += length($0) + 1 }
     END { if (!found) print after + 0 }')
@@ -210,6 +246,14 @@ fetch_usage() {
       if jq -e '(.limits | type) == "array" or (.five_hour | type) == "object"' "$body" >/dev/null 2>&1; then
         jq -c --argjson ts "$(now)" '{ts: $ts, body: .}' "$body" | write_json "$STATE/usage.json"
         rm -f "$STATE/usage.backoff" "$STATE/usage.strikes"
+        jq -c --argjson ts "$(now)" "$JQ_TIME"'
+          def kind($k): first(.limits[]? | select(.kind == $k));
+          { ts: $ts,
+            p5: (kind("session").percent // .five_hour.utilization),
+            r5: (kind("session").resets_at // .five_hour.resets_at | iso | minute),
+            p7: (kind("weekly_all").percent // .seven_day.utilization),
+            r7: (kind("weekly_all").resets_at // .seven_day.resets_at | iso | minute) }
+          | select(.p5 != null and .p7 != null)' "$body" | record_history
       fi
       ;;
     429)
@@ -249,27 +293,41 @@ sl_reading() {
     | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . || echo null
 }
 
+# Rates come from the window history. A window's %/$ is its growth over a
+# session's cost growth within one window; spend elsewhere only inflates it.
+# Every call also draws on the 5h and the weekly window at once, so the ratio
+# of their growth within one pair of windows is the ratio of their
+# allowances, whatever the model. Readings are whole percents, so growth
+# being divided is rounded down a point and growth being bounded up one.
 compute_rates() {
   local rates
   lock "$STATE/rates"
-  rates="$(jq -n --slurpfile s <(cat "$sdir/samples" 2>/dev/null) \
+  rates="$(jq -n --slurpfile h <(cat "$STATE/history" 2>/dev/null) \
     --argjson stored "$(cat "$STATE/rates.json" 2>/dev/null || echo '{}')" \
-    --argjson now "$(now)" --argjson min "$MIN_SPAN" '
-    def est($w):
-      ($s | map(select(.[$w].used != null))) as $x
-      | if ($x | length) < 2 then null else
+    --argjson now "$(now)" --argjson min "$MIN_SPAN" "$JQ_TIME"'
+    ($h | map(select(.p5 != null and .p7 != null))) as $x
+    | def ratio:
+        if ($x | length) < 2 then null else
           $x[-1] as $l
-          | ($x | map(select(.[$w].resets == $l[$w].resets)) | .[0]) as $f
-          | ($l.cost - $f.cost) as $span
-          | if $span >= $min
-            then {rate: (($l[$w].used - $f[$w].used + 1) / $span), span: $span, ts: $now}
+          | ($x | map(select(.r5 == $l.r5 and .r7 == $l.r7)) | .[0]) as $f
+          | ($l.p5 - $f.p5) as $d5
+          | if $d5 >= 5
+            then {q: (($l.p7 - $f.p7 + 1) / ($d5 - 1)), span: $d5, ts: $now}
             else null end
         end;
-    def pick($w):
-      est($w) as $e | $stored[$w] as $o
-      | if $e != null and ($o == null or $e.span >= $o.span or $now - $o.ts > 604800)
+      def est($p; $r):
+        [ $x[] | select(.sid != null and .cost != null) ]
+        | group_by([.sid, .[$r]])
+        | map(.[0] as $f | .[-1] as $l | {span: ($l.cost - $f.cost), grew: ($l[$p] - $f[$p])})
+        | map(select(.span >= $min)) | max_by(.span)
+        | if . == null then null else {rate: ((.grew + 1) / .span), span, ts: $now} end;
+      def keep($e; $o):
+        if $e != null and ($o == null or $e.span >= $o.span or $now - $o.ts > 604800)
         then $e else $o end;
-    {five_hour: pick("five_hour"), seven_day: pick("seven_day")} | with_entries(select(.value != null))')"
+    { five_hour: keep(est("p5"; "r5"); $stored.five_hour),
+      seven_day: keep(est("p7"; "r7"); $stored.seven_day),
+      weekly_ratio: keep(ratio; $stored.weekly_ratio) }
+    | with_entries(select(.value != null))')"
   printf '%s\n' "$rates" | write_json "$STATE/rates.json"
   unlock "$STATE/rates"
   printf '%s' "$rates"
@@ -289,9 +347,7 @@ evaluate() {
     --argjson safety "$SAFETY" --argjson prior "$PRIOR_RATE" \
     --argjson api_ttl "$API_TTL" --argjson lag "$REFLECT_LAG" \
     --argjson ttl "$RESERVATION_TTL" --argjson poll "$IN_FLIGHT_POLL" \
-    --argjson max_sleep "$MAX_SLEEP" '
-    def iso: if . == null then null
-      else sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | (try fromdateiso8601 catch null) end;
+    --argjson max_sleep "$MAX_SLEEP" "$JQ_TIME"'
     def clamp: if . < 5 then 5 elif . > $max_sleep then $max_sleep else . end;
     def windows_of($b):
       if ($b.limits | type) == "array" then
@@ -309,7 +365,8 @@ evaluate() {
     def from_sl($n): $sl[$n] // {} | {used, resets};
 
     (($rates.five_hour.rate // $prior) * $safety) as $r5
-    | ([($rates.seven_day.rate // $r5 / $safety) * $safety, $r5] | min) as $r7
+    | ([ ($rates.seven_day.rate // empty) * $safety,
+         $r5 * ($rates.weekly_ratio.q // 1), $r5 ] | min) as $r7
     | def rate: if .name == "five_hour" then $r5
         elif .name == "seven_day" then $r7
         else $r7 * 100 / (.share // 50) end;
@@ -477,6 +534,14 @@ announce() {
 
 statusline() {
   local new old
+  jq -c --argjson ts "$(now)" --arg sid "$sid" "$JQ_TIME"'
+    .cost.total_cost_usd as $cost
+    | .rate_limits
+    | { ts: $ts, sid: $sid, cost: $cost,
+        p5: .five_hour.used_percentage, r5: (.five_hour.resets_at | minute),
+        p7: .seven_day.used_percentage, r7: (.seven_day.resets_at | minute) }
+    | select(.p5 != null and .p7 != null)' <<<"$payload" 2>/dev/null | record_history
+  [ -e "$sdir/on" ] || return 0
   mkdir -p "$sdir"
   old="$(cat "$sdir/statusline.json" 2>/dev/null || echo null)"
   new="$(jq -c --argjson old "$old" --argjson now "$(now)" '
@@ -486,8 +551,6 @@ statusline() {
     | .fresh = ($old == null or $old.cost != .cost or $old.five_hour != .five_hour)
     | .data_ts = (if .fresh then $now else $old.data_ts end)' <<<"$payload")"
   printf '%s\n' "$new" | write_json "$sdir/statusline.json"
-  jq -c 'select(.fresh and .five_hour.used != null) | {ts: .data_ts, cost, five_hour, seven_day}' \
-    <<<"$new" >>"$sdir/samples"
   if [ -e "$sdir/waiting" ]; then
     printf 'cheap ⏸ %s' "$(cut -c1-60 "$sdir/waiting")"
   else

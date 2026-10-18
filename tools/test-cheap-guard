@@ -153,7 +153,7 @@ out="$(jq -nc '{session_id: "s5", cost: {total_cost_usd: 1}, model: {id: "claude
   rate_limits: {five_hour: {used_percentage: 12.5, resets_at: 2000000000},
                 seven_day: {used_percentage: 4, resets_at: 2000000000}}}' | "$GUARD" --statusline)"
 check "statusline segment while holding" "${out%% *}" "cheap"
-check "statusline sample recorded" "$(wc -l <"$CHEAP_STATE/sessions/s5/samples" | tr -d ' ')" 1
+check "statusline feeds the history" "$(tail -n 1 "$CHEAP_STATE/history" | jq -c '[.sid, .cost, .p5]')" '["s5",1,12.5]'
 rm -f "$CHEAP_STATE/sessions/s5/waiting"
 out="$(jq -nc '{session_id: "s5"}' | "$GUARD" --statusline)"
 check "statusline segment" "$out" "cheap"
@@ -162,16 +162,38 @@ check "statusline silent without the mode" "$out" ""
 
 # --- calibration ----------------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s6" && touch "$CHEAP_STATE/sessions/s6/on"
+rm -f "$CHEAP_STATE/rates.json" "$CHEAP_STATE/history"
 for row in "0 10" "2 11" "4 13"; do
   set -- $row
-  printf '{"ts":1,"cost":%s,"five_hour":{"used":%s,"resets":7},"seven_day":{"used":3,"resets":9}}\n' "$1" "$2" \
-    >>"$CHEAP_STATE/sessions/s6/samples"
+  printf '{"ts":1,"sid":"other","cost":%s,"p5":%s,"r5":7,"p7":3,"r7":9}\n' "$1" "$2" >>"$CHEAP_STATE/history"
 done
-rm -f "$CHEAP_STATE/rates.json"
 usage 13 3
 CHEAP_WAIT_DEADLINE=1 hook s6 PostToolBatch >/dev/null
 check "5h rate: (13 - 10 + 1) / 4" "$(jq -c '.five_hour.rate' "$CHEAP_STATE/rates.json")" 1
 check "7d rate: (3 - 3 + 1) / 4" "$(jq -c '.seven_day.rate' "$CHEAP_STATE/rates.json")" 0.25
+
+# Weekly/5h growth ratio from window history: (7 - 3 + 1) / (37 - 17 - 1).
+# With it, a 400k-context Fable call ($14.40 worst case) fits the Fable
+# window at 9% even before the 5h rate is calibrated.
+mkdir -p "$CHEAP_STATE/sessions/s11" && touch "$CHEAP_STATE/sessions/s11/on"
+rm -f "$CHEAP_STATE/rates.json" "$CHEAP_STATE/history"
+usage 37 7 9
+read -r r5 r7 <<<"$(jq -r '
+  def minute: (sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601 + 30) / 60 | floor * 60;
+  [(.limits[0].resets_at | minute), (.limits[1].resets_at | minute)] | @tsv' "$CHEAP_USAGE_FILE")"
+for row in "17 3" "37 7"; do
+  set -- $row
+  printf '{"ts":1,"p5":%s,"r5":%s,"p7":%s,"r7":%s}\n' "$1" "$r5" "$2" "$r7" >>"$CHEAP_STATE/history"
+done
+transcript "$WORK/s11.jsonl" claude-fable-5-1 399000 1000
+out="$(CHEAP_WAIT_DEADLINE=1 hook s11 PostToolBatch)"
+check "weekly ratio learned" "$(jq '.weekly_ratio.q * 1000 | round' "$CHEAP_STATE/rates.json")" 263
+check "Fable call admitted through the ratio" "$out|$(res s11 '.main.cost * 10 | round')" "|144"
+
+out="$(jq -nc '{session_id: "plain", rate_limits: {five_hour: {used_percentage: 40, resets_at: 2000000000},
+  seven_day: {used_percentage: 8, resets_at: 2000003600}}}' | "$GUARD" --statusline)"
+check "any session's statusline feeds the history" "$out|$(tail -n 1 "$CHEAP_STATE/history" | jq -c '[.p5, .p7]')" "|[40,8]"
+check "without creating session state" "$(test -e "$CHEAP_STATE/sessions/plain" && echo y)" ""
 
 # --- /clear carries the mode -------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s7" && touch "$CHEAP_STATE/sessions/s7/on"

@@ -8,8 +8,8 @@
 # then the 5h / 7d window figures, each followed by the local time it resets
 # (with the weekday for 7d); with a monthly budget set for this machine, the
 # session cost plus a month-to-date estimate against that budget; otherwise
-# the session cost alone. While /cheap is on, a trailing segment shows the
-# guard's state, and each render hands the guard its usage readings.
+# the session cost alone. Each render hands cheap-guard its usage readings;
+# while /cheap is on, a trailing segment shows the guard's state.
 #
 # Spend figures are estimates: ccusage sums this machine's local transcripts
 # at public list pricing, so they will not reflect other machines, other
@@ -116,7 +116,7 @@ else
   line="$line$sess_cost"
 fi
 
-if [ -n "$sid" ] && [ -e "${XDG_STATE_HOME:-$HOME/.local/state}/claude-cheap/sessions/$sid/on" ]; then
+if [ -n "$sid" ] && [ -x "$HOME/.claude/hooks/cheap-guard" ]; then
   cheap=$(printf '%s' "$payload" | "$HOME/.claude/hooks/cheap-guard" --statusline 2>/dev/null)
   [ -n "$cheap" ] && line="$line · $cheap"
 fi
