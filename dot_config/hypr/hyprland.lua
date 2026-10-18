@@ -19,3 +19,6 @@ require("default.hypr.toggles")
 
 -- Omarchy floats every Steam window; tile the main library window instead.
 o.window({ class = "steam", title = "Steam" }, { tile = true })
+
+-- Omarchy floats these viewers and tools; tile them instead.
+o.window("(org.gnome.Evince|imv|mpv|localsend|org.omarchy.btop|org.omarchy.bash)", { tile = true })
