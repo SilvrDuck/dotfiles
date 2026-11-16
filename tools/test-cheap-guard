@@ -67,22 +67,47 @@ check "plain session: /cheap mid-prompt ignored" "$out" ""
 check "plain session: no state" "$(ls "$CHEAP_STATE/sessions" 2>/dev/null)" ""
 
 # --- toggling -------------------------------------------------------------
-out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap"}')"
-check "/cheap blocks the prompt" "$(jq -r .decision <<<"$out")" block
-check "/cheap reports status" "$(jq -r '.reason | startswith("cheap: on")' <<<"$out")" true
+# Commands are applied and then let through, never blocked.
+ctx='.hookSpecificOutput.additionalContext'
+out="$(CHEAP_WAIT_DEADLINE=1 hook s1 UserPromptSubmit '{"prompt":"/cheap"}')"
+check "/cheap is not blocked" "$(jq -r '.decision // "none"' <<<"$out")" none
+check "/cheap reports status" "$(jq -r "$ctx | startswith(\"cheap: on\")" <<<"$out")" true
 check "/cheap sets the flag" "$(test -e "$CHEAP_STATE/sessions/s1/on" && echo y)" y
 
-out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap status"}')"
-check "/cheap status blocks" "$(jq -r .decision <<<"$out")" block
+out="$(CHEAP_WAIT_DEADLINE=1 hook s1 UserPromptSubmit '{"prompt":"/cheap status"}')"
+check "/cheap status reports, unblocked" "$(jq -r "(.decision // \"none\"), ($ctx | startswith(\"cheap: on\"))" <<<"$out" | paste -sd,)" "none,true"
 
 out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap off"}')"
-check "/cheap off" "$(jq -r .reason <<<"$out")" "cheap: off"
+check "/cheap off reports, unblocked" "$(jq -r "(.decision // \"none\"), $ctx" <<<"$out" | paste -sd,)" "none,cheap: off"
 check "/cheap off clears state" "$(test -e "$CHEAP_STATE/sessions/s1" && echo y)" ""
+
+CHEAP_WAIT_DEADLINE=1 hook s1 UserPromptSubmit '{"prompt":"/cheap"}' >/dev/null
+out="$(hook s1 UserPromptSubmit '{"prompt":"/cheap off and carry on"}')"
+check "/cheap off <text> lets the prompt through" "$(jq -r "(.decision // \"none\"), $ctx" <<<"$out" | paste -sd,)" "none,cheap: off"
+check "/cheap off <text> clears state" "$(test -e "$CHEAP_STATE/sessions/s1" && echo y)" ""
 
 out="$(CHEAP_WAIT_DEADLINE=1 hook s2 UserPromptSubmit '{"prompt":"/cheap fix the build"}')"
 check "/cheap <task> lets the prompt through" "$out|$?" "|0"
 check "/cheap <task> sets the flag" "$(test -e "$CHEAP_STATE/sessions/s2/on" && echo y)" y
 check "/cheap <task> reserves the main call" "$(res s2 '.main.end')" null
+
+# /cheap off frees a hold within one 5-second check.
+mkdir -p "$CHEAP_STATE/sessions/s17" && touch "$CHEAP_STATE/sessions/s17/on"
+transcript "$WORK/s17.jsonl" claude-opus-5-5 99000 1000
+usage 98 10
+CHEAP_WAIT_DEADLINE=600 hook s17 PostToolBatch >/dev/null &
+held=$!
+sleep 2
+start=$(date +%s)
+hook s17 UserPromptSubmit '{"prompt":"/cheap off"}' >/dev/null
+wait "$held"
+check "/cheap off frees a hold within seconds" "$(($(date +%s) - start <= 7))" 1
+
+# The agent can turn the mode on through the skill, but not off.
+hook s15 PreToolUse '{"tool_name":"Skill","tool_input":{"skill":"cheap","args":"off"}}' >/dev/null
+check "the agent's skill call turns the mode on" "$(test -e "$CHEAP_STATE/sessions/s15/on" && echo y)" y
+hook s16 PreToolUse '{"tool_name":"Skill","tool_input":{"skill":"handout"}}' >/dev/null
+check "other skills leave the mode off" "$(test -e "$CHEAP_STATE/sessions/s16" && echo y)" ""
 
 # --- worst case and admission ----------------------------------------------
 # Opus 5.5, 100k context: (100000 * 2 * $4 + 128000 * $20) / 1e6 = $3.36.
@@ -255,6 +280,13 @@ out="$(jq -nc '{session_id: "plain", rate_limits: {five_hour: {used_percentage: 
   seven_day: {used_percentage: 8, resets_at: 2000003600}}}' | "$GUARD" --statusline)"
 check "any session's statusline feeds the history" "$out|$(tail -n 1 "$CHEAP_STATE/history" | jq -c '[.p5, .p7]')" "|[40,8]"
 check "without creating session state" "$(test -e "$CHEAP_STATE/sessions/plain" && echo y)" ""
+
+usage 13 3
+jq -c '{ts: 0, body: .}' "$CHEAP_USAGE_FILE" >"$CHEAP_STATE/usage.json"
+echo $(($(date +%s) + 600)) >"$CHEAP_STATE/usage.backoff"
+rm -f "$CHEAP_STATE/sessions/s6/statusline.json"
+out="$(CHEAP_WAIT_DEADLINE=1 hook s6 PostToolBatch)"
+check "another session's fresh statusline admits a held session" "$out|$(test -e "$CHEAP_STATE/sessions/s6/waiting" && echo y)" "|"
 
 # --- /clear carries the mode -------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s7" && touch "$CHEAP_STATE/sessions/s7/on"

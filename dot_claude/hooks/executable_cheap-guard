@@ -11,7 +11,8 @@
 #   PreCompact         the compaction call
 # PreToolUse, Stop, StopFailure, SubagentStop and SessionStart (after a
 # compaction) mark an agent's call done.
-# UserPromptSubmit also takes `/cheap [on|off|status]` without a model call.
+# UserPromptSubmit also applies `/cheap [on|off|status]`, and PreToolUse lets
+# the agent turn the mode on through the skill.
 # SessionStart re-announces the mode after compaction and resume, and with
 # SessionEnd carries it across /clear.
 #
@@ -79,6 +80,7 @@ if [ ! -e "$sdir/on" ]; then
   case "$mode/$event" in
     --statusline/*) ;;
     /UserPromptSubmit) [[ $(field prompt) =~ ^[[:space:]]*/cheap([[:space:]]|$) ]] || exit 0 ;;
+    /PreToolUse) [[ $payload =~ \"skill\"[[:space:]]*:[[:space:]]*\"cheap\" ]] || exit 0 ;;
     /SessionStart) [ "$(field source)" = clear ] || exit 0 ;;
     *) exit 0 ;;
   esac
@@ -330,13 +332,20 @@ api_cache() {
 
 # The statusline's percentages come from the headers of this session's
 # latest response. They count as a reading taken when the last main call
-# started, and only once a response has landed since then.
+# started, and only once a response has landed since then. A held session
+# makes no calls, so failing that, any session's statusline recorded in the
+# history moments ago stands in: its windows are the same account-wide ones.
 sl_reading() {
   local start
   start="$(cat "$sdir/main_start" 2>/dev/null || echo 0)"
   jq -c --argjson start "$start" --argjson now "$(now)" --argjson fresh "$SL_FRESH" '
     select(.data_ts >= $start and $now - $start <= $fresh and .five_hour.used != null)
-    | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . || echo null
+    | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . ||
+    tail -n 1 "$STATE/history" 2>/dev/null |
+    jq -c --argjson now "$(now)" --argjson fresh "$SL_FRESH" '
+      select(.sid != null and $now - .ts <= $fresh)
+      | {ts, five_hour: {used: .p5, resets: .r5}, seven_day: {used: .p7, resets: .r7}}' 2>/dev/null |
+    grep . || echo null
 }
 
 # Rates come from the window history. A window's %/$ is its growth over a
@@ -525,7 +534,8 @@ gate() {
       return 0
     fi
     unlock "$sdir/res"
-    [ -e "$sdir/waiting" ] || notify "Claude /cheap is holding" "$(jq -r .summary <<<"$verdict")"
+    [ -e "$sdir/waiting" ] || notify "Claude /cheap is holding" \
+      "$(jq -r .summary <<<"$verdict") — Esc, then /cheap off, to stop waiting"
     jq -r .summary <<<"$verdict" >"$sdir/waiting"
     left=$((started + WAIT_DEADLINE - $(now)))
     if [ "$left" -le 0 ]; then
@@ -534,7 +544,11 @@ gate() {
       exit 0
     fi
     pause="$(jq -r .wait <<<"$verdict")"
-    sleep "$((pause < left ? pause : left))"
+    pause=$((pause < left ? pause : left))
+    while [ "$pause" -gt 0 ] && [ -e "$sdir/on" ]; do
+      sleep $((pause < 5 ? pause : 5))
+      pause=$((pause - 5))
+    done
     waited=1
   done
 }
@@ -545,9 +559,8 @@ enable() {
   find "$STATE/sessions" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} + 2>/dev/null
 }
 
-block_prompt() {
-  jq -nc --arg r "$1" '{decision: "block", reason: $r}'
-  exit 0
+context() {
+  jq -nc --arg e "$1" --arg c "$2" '{hookSpecificOutput: {hookEventName: $e, additionalContext: $c}}'
 }
 
 status_text() {
@@ -565,7 +578,7 @@ status_text() {
 # /clear agree on an identity although each hook runs in its own shell.
 claude_pid() {
   local p=$PPID comm
-  for _ in 1 2 3 4 5; do
+  for _ in $(seq 20); do
     comm="$(ps -o comm= -p "$p" 2>/dev/null)"
     [[ $comm == claude* ]] && { echo "$p"; return; }
     p="$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')"
@@ -575,8 +588,7 @@ claude_pid() {
 }
 
 announce() {
-  jq -nc --arg ctx "/cheap mode is on for this session: hooks hold each model call until its worst-case cost fits under ${CEILING}% of every usage window, waiting through resets when needed. The user can run \`/cheap off\` or \`/cheap status\`." \
-    '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
+  context SessionStart "/cheap mode is on for this session: hooks hold each model call until its worst-case cost fits under ${CEILING}% of every usage window, waiting through resets when needed. The user can run \`/cheap off\` or \`/cheap status\`."
 }
 
 statusline() {
@@ -614,26 +626,48 @@ agent="$(field agent_id)"
 key="${agent:-main}"
 
 case "$event" in
+  # A /cheap command is never blocked: Claude Code can cut a running turn
+  # short to submit it, and a blocked command would leave nothing to resume
+  # that turn. The hook applies it and the prompt goes on with the status.
   UserPromptSubmit)
     prompt="$(jq -r '.prompt // ""' <<<"$payload")"
+    status=''
     if [[ $prompt =~ ^[[:space:]]*/cheap([[:space:]]+(.*))?$ ]]; then
       arg="$(printf '%s' "${BASH_REMATCH[2]:-}" | sed 's/[[:space:]]*$//')"
       case "$arg" in
-        '' | on) enable; block_prompt "$(status_text)" ;;
-        off) rm -rf "$sdir"; block_prompt "cheap: off" ;;
+        off | off[[:space:]]*)
+          rm -rf "$sdir"
+          context UserPromptSubmit "cheap: off"
+          exit 0
+          ;;
         status)
-          [ -e "$sdir/on" ] || block_prompt "cheap: off"
-          block_prompt "$(status_text)"
+          if [ ! -e "$sdir/on" ]; then
+            context UserPromptSubmit "cheap: off"
+            exit 0
+          fi
+          status="$(status_text)"
+          ;;
+        '' | on)
+          enable
+          status="$(status_text)"
           ;;
         *) enable ;;
       esac
     fi
     gate main ''
+    [ -n "$status" ] && context UserPromptSubmit "$status"
     ;;
   PostToolBatch) gate "$key" "$agent" ;;
   SubagentStart) gate "$key" "$agent" ;;
   PreCompact) gate main '' ;;
-  PreToolUse | Stop | StopFailure | SubagentStop) release "$key" "$agent" ;;
+  # The agent may turn the mode on through the skill, never off.
+  PreToolUse)
+    if [ "$(field tool_name)" = Skill ] && [[ $payload =~ \"skill\"[[:space:]]*:[[:space:]]*\"cheap\" ]]; then
+      enable
+    fi
+    release "$key" "$agent"
+    ;;
+  Stop | StopFailure | SubagentStop) release "$key" "$agent" ;;
   SessionStart)
     case "$(field source)" in
       clear)
