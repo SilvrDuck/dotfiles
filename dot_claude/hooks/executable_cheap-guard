@@ -7,7 +7,9 @@
 # A model call only ever follows one of these events, so each is a gate:
 #   UserPromptSubmit   a new turn, including background-task wakeups
 #   PostToolBatch      the next call of the main loop or of a subagent
-#   SubagentStart      the first call of a new or resumed subagent
+#   SubagentStart      the first call of a new or resumed subagent, already
+#                      waited for at its spawn (PreToolUse on Agent or
+#                      SendMessage, run as `cheap-guard --spawn`)
 #   PreCompact         the compaction call
 # PreToolUse, Stop, StopFailure, SubagentStop and SessionStart (after a
 # compaction) mark an agent's call done.
@@ -52,6 +54,7 @@ CACHE_WARM=240                                             # under the 5m cache 
 SL_FRESH=60                                                # statusline reading age
 API_TTL=30                                                 # endpoint reading age
 REFLECT_LAG=60                                             # usage accounting lag
+BORROWED_AGE=600                                           # other sessions' lag
 RESERVATION_TTL=3600                                       # abandoned call expiry
 IN_FLIGHT_POLL=5                                           # recheck while calls run
 MAX_SLEEP=300                                              # longest single wait
@@ -335,6 +338,8 @@ api_cache() {
 # started, and only once a response has landed since then. A held session
 # makes no calls, so failing that, any session's statusline recorded in the
 # history moments ago stands in: its windows are the same account-wide ones.
+# That session's response may have started long before it was recorded, so
+# for releasing finished calls such a reading counts as BORROWED_AGE older.
 sl_reading() {
   local start
   start="$(cat "$sdir/main_start" 2>/dev/null || echo 0)"
@@ -342,9 +347,9 @@ sl_reading() {
     select(.data_ts >= $start and $now - $start <= $fresh and .five_hour.used != null)
     | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . ||
     tail -n 1 "$STATE/history" 2>/dev/null |
-    jq -c --argjson now "$(now)" --argjson fresh "$SL_FRESH" '
+    jq -c --argjson now "$(now)" --argjson fresh "$SL_FRESH" --argjson age "$BORROWED_AGE" '
       select(.sid != null and $now - .ts <= $fresh)
-      | {ts, five_hour: {used: .p5, resets: .r5}, seven_day: {used: .p7, resets: .r7}}' 2>/dev/null |
+      | {ts: (.ts - $age), five_hour: {used: .p5, resets: .r5}, seven_day: {used: .p7, resets: .r7}}' 2>/dev/null |
     grep . || echo null
 }
 
@@ -501,16 +506,53 @@ release() {
   unlock "$sdir/res"
 }
 
+# A starting subagent takes over a reservation its spawn already waited for,
+# so SubagentStart, which Claude Code cancels after ten minutes, never has
+# to wait. Spawn reservations all price a fresh agent's first call, so any
+# one of them covers a fresh agent; a resumed one with more context than
+# that goes through its own gate.
+take_spawn() {
+  local key="$1" worst taken
+  read -r worst _ <<<"$(worst_case "$2")"
+  lock "$sdir/res"
+  taken="$(jq -c --arg k "$key" --argjson w "$worst" --argjson now "$(now)" '
+    ([ to_entries[] | select((.key | startswith("spawn:")) and .value.end == null and .value.cost >= $w) ]
+     | sort_by(.value.start) | .[0]) as $s
+    | if $s == null then empty
+      else del(.[$s.key]) | .[$k] = ($s.value | del(.parent) | .start = $now) end' \
+    "$sdir/reservations.json" 2>/dev/null)"
+  [ -n "$taken" ] && printf '%s\n' "$taken" | write_json "$sdir/reservations.json"
+  unlock "$sdir/res"
+  [ -n "$taken" ]
+}
+
 emit_stop() {
   jq -nc --arg r "$1" '{continue: false, stopReason: $r}'
 }
 
+# The first call of an agent with no transcript yet, of a model not yet known.
+fresh_worst() {
+  local pin pout
+  read -r pin pout <<<"$(price '')"
+  awk -v c="$FIRST_CALL_CONTEXT" -v i="$pin" -v o="$pout" -v m="$MAX_OUTPUT" \
+    'BEGIN { printf "%.4f ", (c * 2 * i + m * o) / 1e6 }'
+}
+
+# Waits until a call fits, then reserves it under $key. With "spawn", the
+# call is the first one of a subagent the agent is about to start: it is
+# reserved for SubagentStart to take over, and the agent's next PostToolBatch
+# drops it if no subagent did.
 gate() {
-  local key="$1" agent="$2" worst model verdict started left pause waited=0
+  local key="$1" agent="$2" kind="${3:-}" parent='' worst model verdict started left pause waited=0
+  [ "$kind" = spawn ] && parent="${agent:-main}"
   started="$(now)"
   while [ -e "$sdir/on" ]; do
     # Re-priced on every pass: a cache that was warm goes cold while waiting.
-    read -r worst model <<<"$(worst_case "$agent")"
+    if [ "$kind" = spawn ]; then
+      read -r worst model <<<"$(fresh_worst)"
+    else
+      read -r worst model <<<"$(worst_case "$agent")"
+    fi
     api_cache >/dev/null
     lock "$sdir/res"
     verdict="$(evaluate "$key" "$worst" "$model")"
@@ -520,9 +562,14 @@ gate() {
       exit 1
     fi
     jq -c --argjson v "$verdict" --arg k "$key" --argjson now "$(now)" \
-      --argjson worst "$worst" --arg model "$model" '
+      --argjson worst "$worst" --arg model "$model" --arg parent "$parent" --arg event "$event" '
       with_entries(select(.key | IN($v.drop[]) | not))
-      | if $v.ok then .[$k] = {start: $now, cost: $worst, model: $model} else . end' \
+      | if $event == "PostToolBatch"
+        then with_entries(select((.key | startswith("spawn:") | not) or .value.parent != $k))
+        else . end
+      | if $v.ok then .[$k] = {start: $now, cost: $worst, model: $model}
+          + (if $parent != "" then {parent: $parent} else {} end)
+        else . end' \
       <(cat "$sdir/reservations.json" 2>/dev/null || echo '{}') | write_json "$sdir/reservations.json"
     if [ "$(jq -r .ok <<<"$verdict")" = true ]; then
       [ "$key" = main ] && now >"$sdir/main_start"
@@ -548,6 +595,7 @@ gate() {
     while [ "$pause" -gt 0 ] && [ -e "$sdir/on" ]; do
       sleep $((pause < 5 ? pause : 5))
       pause=$((pause - 5))
+      touch "$sdir/waiting" 2>/dev/null
     done
     waited=1
   done
@@ -610,6 +658,11 @@ statusline() {
     | .fresh = ($old == null or $old.cost != .cost or $old.five_hour != .five_hour)
     | .data_ts = (if .fresh then $now else $old.data_ts end)' <<<"$payload")"
   printf '%s\n' "$new" | write_json "$sdir/statusline.json"
+  # A hold refreshes its marker every 5 seconds; an older one was cancelled.
+  if [ -e "$sdir/waiting" ] &&
+    [ $(($(now) - $(stat -c %Y "$sdir/waiting" 2>/dev/null || stat -f %m "$sdir/waiting"))) -gt 15 ]; then
+    rm -f "$sdir/waiting"
+  fi
   if [ -e "$sdir/waiting" ]; then
     printf 'cheap ⏸ %s' "$(cut -c1-60 "$sdir/waiting")"
   else
@@ -624,6 +677,11 @@ fi
 
 agent="$(field agent_id)"
 key="${agent:-main}"
+
+if [ "$mode" = --spawn ]; then
+  gate "spawn:$(field tool_use_id)" "$agent" spawn
+  exit 0
+fi
 
 case "$event" in
   # A /cheap command is never blocked: Claude Code can cut a running turn
@@ -658,7 +716,7 @@ case "$event" in
     [ -n "$status" ] && context UserPromptSubmit "$status"
     ;;
   PostToolBatch) gate "$key" "$agent" ;;
-  SubagentStart) gate "$key" "$agent" ;;
+  SubagentStart) take_spawn "$key" "$agent" || gate "$key" "$agent" ;;
   PreCompact) gate main '' ;;
   # The agent may turn the mode on through the skill, never off.
   PreToolUse)

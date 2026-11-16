@@ -51,6 +51,13 @@ claude_settings:
           - type: command
             command: $HOME/.claude/hooks/cheap-guard
             timeout: 30
+      - matcher: Agent|SendMessage
+        hooks:
+          - type: command
+            command: $HOME/.claude/hooks/cheap-guard --spawn
+            timeout: 691200
+            onFailure: block
+            statusMessage: "cheap: waiting for usage headroom"
     Stop:
       - hooks: *cheap-bookkeeping
     StopFailure:

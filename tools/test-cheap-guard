@@ -58,6 +58,12 @@ hook() {
 
 res() { jq -c "$2" "$CHEAP_STATE/sessions/$1/reservations.json" 2>/dev/null; }
 
+spawn() {
+  jq -nc --arg s "$1" --arg t "$WORK/$1.jsonl" --arg id "$2" \
+    '{session_id: $s, transcript_path: $t, hook_event_name: "PreToolUse", tool_name: "Agent",
+      tool_use_id: $id, tool_input: {model: "haiku"}}' | "$GUARD" --spawn
+}
+
 # --- sessions without the mode ---------------------------------------------
 usage 50 10
 out="$(hook plain PostToolBatch)"
@@ -169,6 +175,31 @@ out="$(CHEAP_WAIT_DEADLINE=1 hook s10 PostToolBatch)"
 check "Fable call is held by the Fable window" "$(jq -r .continue <<<"$out")" false
 check "hold names the Fable window" "$(grep -c 'scoped:Fable' "$CHEAP_STATE/sessions/s10/waiting")" 1
 
+# --- subagent spawns ---------------------------------------------------------
+# A spawn waits and reserves a fresh agent's first call ($9.40); the agent
+# then takes that reservation over at SubagentStart without waiting, even
+# with the window full by then.
+mkdir -p "$CHEAP_STATE/sessions/s18" && touch "$CHEAP_STATE/sessions/s18/on"
+transcript "$WORK/s18.jsonl" claude-opus-5-5 99000 1000
+usage 20 10
+CHEAP_WAIT_DEADLINE=1 spawn s18 tu1 >/dev/null
+check "a spawn reserves the first call" "$(res s18 '.["spawn:tu1"] | [(.cost * 10 | round), .parent]')" '[94,"main"]'
+usage 98 10
+start=$(date +%s)
+out="$(CHEAP_WAIT_DEADLINE=600 hook s18 SubagentStart '{"agent_id":"x1","agent_type":"x"}')"
+check "the subagent takes it over at once" "$out|$(($(date +%s) - start <= 2))" "|1"
+check "under its own id" "$(res s18 '[has("spawn:tu1"), (.x1.cost * 10 | round)]')" '[false,94]'
+usage 20 10
+CHEAP_WAIT_DEADLINE=1 spawn s18 tu2 >/dev/null
+hook s18 PreToolUse '{"tool_name":"Agent"}' >/dev/null
+CHEAP_WAIT_DEADLINE=1 hook s18 PostToolBatch >/dev/null
+check "an unused spawn is dropped at the next batch" "$(res s18 'has("spawn:tu2")')" false
+usage 98 10
+out="$(CHEAP_WAIT_DEADLINE=1 spawn s18 tu3)"
+check "a spawn waits when there is no room" "$(jq -r .continue <<<"$out")" false
+out="$(spawn plain tu4)"
+check "spawns are free without the mode" "$out|$(test -e "$CHEAP_STATE/sessions/plain" && echo y)" "|"
+
 # --- estimate -------------------------------------------------------------
 # Same Opus 5.5 call as above ($3.36); a synthetic entry after it is not a
 # call, and a 300k-character screenshot costs 8000 tokens ($0.064).
@@ -240,9 +271,9 @@ out="$(jq -nc '{session_id: "s5", cost: {total_cost_usd: 1}, model: {id: "claude
                 seven_day: {used_percentage: 4, resets_at: 2000000000}}}' | "$GUARD" --statusline)"
 check "statusline segment while holding" "${out%% *}" "cheap"
 check "statusline feeds the history" "$(tail -n 1 "$CHEAP_STATE/history" | jq -c '[.sid, .cost, .p5]')" '["s5",1,12.5]'
-rm -f "$CHEAP_STATE/sessions/s5/waiting"
+touch -t "$(jq -nr 'now - 60 | strflocaltime("%Y%m%d%H%M.%S")')" "$CHEAP_STATE/sessions/s5/waiting"
 out="$(jq -nc '{session_id: "s5"}' | "$GUARD" --statusline)"
-check "statusline segment" "$out" "cheap"
+check "a cancelled hold's marker is cleared" "$out|$(test -e "$CHEAP_STATE/sessions/s5/waiting" && echo y)" "cheap|"
 out="$(jq -nc '{session_id: "plain"}' | "$GUARD" --statusline)"
 check "statusline silent without the mode" "$out" ""
 
