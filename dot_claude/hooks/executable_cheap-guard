@@ -34,7 +34,9 @@
 #
 # Readings come from the statusline (fed by `cheap-guard --statusline`) when
 # this session's last call started moments ago, else from the OAuth usage
-# endpoint, cached machine-wide. No fresh reading means wait.
+# endpoint, cached machine-wide. Failing a fresh one, an endpoint reading up
+# to STALE_MAX old counts with a point added per minute of age; nothing at
+# all means wait.
 #
 # Wired globally from .chezmoidata/claude-settings.yaml; sessions without
 # the mode exit before parsing anything.
@@ -52,7 +54,8 @@ MAX_CONTEXT=1000000                                        # largest context win
 IMAGE_TOKENS=8000                                          # above any image's cost
 CACHE_WARM=240                                             # under the 5m cache TTL
 SL_FRESH=60                                                # statusline reading age
-API_TTL=30                                                 # endpoint reading age
+API_TTL=60                                                 # endpoint reading age
+STALE_MAX=1800                                             # oldest usable reading
 REFLECT_LAG=60                                             # usage accounting lag
 BORROWED_AGE=600                                           # other sessions' lag
 RESERVATION_TTL=3600                                       # abandoned call expiry
@@ -346,9 +349,10 @@ sl_reading() {
   jq -c --argjson start "$start" --argjson now "$(now)" --argjson fresh "$SL_FRESH" '
     select(.data_ts >= $start and $now - $start <= $fresh and .five_hour.used != null)
     | {ts: $start, five_hour, seven_day}' "$sdir/statusline.json" 2>/dev/null | grep . ||
-    tail -n 1 "$STATE/history" 2>/dev/null |
-    jq -c --argjson now "$(now)" --argjson fresh "$SL_FRESH" --argjson age "$BORROWED_AGE" '
-      select(.sid != null and $now - .ts <= $fresh)
+    tail -n 500 "$STATE/history" 2>/dev/null |
+    jq -sc --argjson now "$(now)" --argjson fresh "$SL_FRESH" --argjson age "$BORROWED_AGE" '
+      map(select(.sid != null)) | last
+      | select(. != null and $now - .ts <= $fresh)
       | {ts: (.ts - $age), five_hour: {used: .p5, resets: .r5}, seven_day: {used: .p7, resets: .r7}}' 2>/dev/null |
     grep . || echo null
 }
@@ -405,7 +409,7 @@ evaluate() {
     --argjson backoff "$(cat "$STATE/usage.backoff" 2>/dev/null || echo 0)" \
     --argjson ceiling "$CEILING" --argjson outside "$OUTSIDE_RESERVE" \
     --argjson safety "$SAFETY" --argjson prior "$PRIOR_RATE" \
-    --argjson api_ttl "$API_TTL" --argjson lag "$REFLECT_LAG" \
+    --argjson api_ttl "$API_TTL" --argjson stale_max "$STALE_MAX" --argjson lag "$REFLECT_LAG" \
     --argjson ttl "$RESERVATION_TTL" --argjson poll "$IN_FLIGHT_POLL" \
     --argjson max_sleep "$MAX_SLEEP" "$JQ_TIME"'
     def clamp: if . < 5 then 5 elif . > $max_sleep then $max_sleep else . end;
@@ -447,6 +451,11 @@ evaluate() {
                    | .used = (if (.resets // 0) > $now then .used else 0 end)
                        + ([0, (from_sl("seven_day").used // 100) - ($old.seven_day.used // 0)] | max)
                          * 100 / (.share // 50) + 1 ]) }
+       elif $api != null and $now - $api.ts <= $stale_max then
+         # An older endpoint reading, each window raised a point for every
+         # minute it has aged past API_TTL.
+         (($now - $api.ts - $api_ttl) / 60 | ceil | if . < 0 then 0 else . end) as $aged
+         | { ts: $api.ts, windows: [ windows_of($api.body)[] | .used += $aged ] }
        else null end) as $reading
 
     | ($res | to_entries | map(.value + {key: .key})) as $r

@@ -319,6 +319,24 @@ rm -f "$CHEAP_STATE/sessions/s6/statusline.json"
 out="$(CHEAP_WAIT_DEADLINE=1 hook s6 PostToolBatch)"
 check "another session's fresh statusline admits a held session" "$out|$(test -e "$CHEAP_STATE/sessions/s6/waiting" && echo y)" "|"
 
+# A held session with the endpoint backed off and no fresh statusline anywhere
+# still gets a reading: the 3-minute-old endpoint one plus 2 points.
+mkdir -p "$CHEAP_STATE/sessions/s19" && touch "$CHEAP_STATE/sessions/s19/on"
+transcript "$WORK/s19.jsonl" claude-opus-5-5 99000 1000
+usage 40 10
+jq -c --argjson ts $(($(date +%s) - 180)) '{ts: $ts, body: .}' "$CHEAP_USAGE_FILE" >"$CHEAP_STATE/usage.json"
+echo $(($(date +%s) + 600)) >"$CHEAP_STATE/usage.backoff"
+cp "$CHEAP_STATE/history" "$WORK/history.keep"
+printf '{"ts":%s,"p5":40,"r5":1,"p7":10,"r7":2}\n' $(($(date +%s) - 180)) >"$CHEAP_STATE/history"
+out="$(CHEAP_WAIT_DEADLINE=1 hook s19 PostToolBatch)"
+check "an aged reading admits a call" "$out|$(test -e "$CHEAP_STATE/sessions/s19/waiting" && echo y)" "|"
+jq -c --argjson ts $(($(date +%s) - 2400)) '{ts: $ts, body: .}' "$CHEAP_USAGE_FILE" >"$CHEAP_STATE/usage.json"
+printf '{"ts":%s,"p5":40,"r5":1,"p7":10,"r7":2}\n' $(($(date +%s) - 2400)) >>"$CHEAP_STATE/history"
+out="$(CHEAP_WAIT_DEADLINE=1 hook s19 PostToolBatch)"
+check "a reading past STALE_MAX holds" "$(cat "$CHEAP_STATE/sessions/s19/waiting")" "no fresh usage reading"
+rm -f "$CHEAP_STATE/usage.backoff"
+mv "$WORK/history.keep" "$CHEAP_STATE/history"
+
 # --- /clear carries the mode -------------------------------------------------
 mkdir -p "$CHEAP_STATE/sessions/s7" && touch "$CHEAP_STATE/sessions/s7/on"
 hook s7 SessionEnd '{"reason":"clear"}' >/dev/null
