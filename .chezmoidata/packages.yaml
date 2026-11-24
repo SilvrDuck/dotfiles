@@ -37,6 +37,7 @@ packages:
       - watch
       - pay-respects
       - mise
+      - mosh
       - cmake
       - hyperfine
       - xh
